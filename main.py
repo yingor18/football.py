@@ -157,12 +157,31 @@ WEEKLY_FLAVOR_EVENTS_TEMPLATE = [
     "🗞️ 有傳言指其他球會嘅球探正在留意你嘅表現。",
     "💬 教練 {coach} 私下同你傾偈,分析你近期表現。",
     "🍽️ 你同隊友 {teammate} 一齊食飯,默契更進一步。",
+    "🎙️ 賽後訪問你被問到轉會傳聞,你笑而不答。",
+    "🧢 更衣室入面,{teammate} 送咗你一份小禮物慶祝你近期進步。",
+    "📸 球迷喺球會門口等候同你合照簽名。",
+    "🧳 球隊安排咗一次短途客場移動,你喺旅途上同隊友傾咗好多。",
+    "🎧 你喺訓練後聽住音樂放鬆,心情不錯。",
+    "🗓️ 球會公佈咗下季嘅初步賽程,你開始為新一季部署做準備。",
+    "🧊 你今日嘅冰療恢復做得特別好,身體感覺輕盈。",
+    "📉 地方報章對你近期表現有啲負面評論,你決定唔理會噪音。",
+    "🎂 更衣室為隊友慶祝生日,氣氛輕鬆歡樂。",
+    "🚌 球隊巴士遲到,大家喺球會等咗好耐先出發。",
+    "🏟️ 你参觀咗球場擴建工程,對球會未來充滿期待。",
 ]
 
 MONEY_EVENTS = {2: 300, 5: -1, 8: 0}  # 索引對應觸發事件時嘅金額變化(部分事件冇金錢影響)
 
 def gen_flavor_text(p):
-    idx = random.randint(0, len(WEEKLY_FLAVOR_EVENTS_TEMPLATE) - 1)
+    """揀一個花絮事件;盡量避免同上一週重複,減少玩家見到重覆內容嘅感覺。"""
+    last_idx = p.get('_last_flavor_idx', -1)
+    pool_size = len(WEEKLY_FLAVOR_EVENTS_TEMPLATE)
+    idx = random.randint(0, pool_size - 1)
+    tries = 0
+    while idx == last_idx and tries < 5 and pool_size > 1:
+        idx = random.randint(0, pool_size - 1)
+        tries += 1
+    p['_last_flavor_idx'] = idx
     text = WEEKLY_FLAVOR_EVENTS_TEMPLATE[idx].format(
         rival=p.get('rival_name', '隊友'), coach=p.get('coach_name', '教練'), teammate=p.get('teammate_name', '隊友')
     )
@@ -261,6 +280,33 @@ def _ev_child_milestone_b(p):
     p['family_happiness'] = max(0, p['family_happiness'] - 8)
     return "工作太忙，你錯過咗小朋友嘅活動，心裡有啲愧疚。"
 
+def _ev_press_conference_a(p):
+    p['chemistry'] = min(100, p['chemistry'] + 4)
+    return "你喺記者會強調團隊精神，將功勞歸於全隊，更衣室氣氛更融洽。"
+
+def _ev_press_conference_b(p):
+    p['coach_trust'] = min(100, p['coach_trust'] + 2)
+    p['chemistry'] = max(0, p['chemistry'] - 3)
+    return "你喺記者會強調個人表現，教練欣賞你嘅自信，但隊友覺得你有啲搶鏡。"
+
+def _ev_fan_meet_a(p):
+    p['coach_trust'] = min(100, p['coach_trust'] + 2)
+    p['fatigue'] = min(100, p['fatigue'] + 8)
+    return "你落力同球迷簽名合照，人氣上升，但都幾攰。"
+
+def _ev_fan_meet_b(p):
+    p['fatigue'] = max(0, p['fatigue'] - 3)
+    return "你簡短應酬完球迷活動就返去休息。"
+
+def _ev_sponsor_deal_a(p):
+    p['money'] += 600
+    p['fatigue'] = min(100, p['fatigue'] + 10)
+    return "你接受咗一份小額代言合約，額外收入 $600，但拍攝令你有啲攰。"
+
+def _ev_sponsor_deal_b(p):
+    p['coach_trust'] = min(100, p['coach_trust'] + 1)
+    return "你推卻咗代言邀約，專注留喺球場訓練。"
+
 LIFE_EVENTS = [
     {"id": "rival_confront", "condition": lambda p: True,
      "title": "😤 更衣室磨擦",
@@ -318,6 +364,27 @@ LIFE_EVENTS = [
          {"label": "出席活動支持", "apply": _ev_child_milestone_a},
          {"label": "工作太忙，未能抽身", "apply": _ev_child_milestone_b},
      ]},
+    {"id": "press_conference", "condition": lambda p: p['matches'] >= 3,
+     "title": "🎙️ 賽後記者會",
+     "desc": "記者追問你近期表現嘅原因，你要點回應？",
+     "options": [
+         {"label": "強調團隊精神", "apply": _ev_press_conference_a},
+         {"label": "強調個人表現", "apply": _ev_press_conference_b},
+     ]},
+    {"id": "fan_meet", "condition": lambda p: True,
+     "title": "📸 球迷見面會",
+     "desc": "球會安排咗一次球迷見面會，需要你出席。",
+     "options": [
+         {"label": "落力簽名互動", "apply": _ev_fan_meet_a},
+         {"label": "簡短應酬，盡快離開", "apply": _ev_fan_meet_b},
+     ]},
+    {"id": "sponsor_deal", "condition": lambda p: p['age'] >= 18,
+     "title": "💼 代言機會",
+     "desc": "一間品牌想邀請你拍攝一輯小額代言廣告。",
+     "options": [
+         {"label": "接受代言", "apply": _ev_sponsor_deal_a},
+         {"label": "推卻，專注訓練", "apply": _ev_sponsor_deal_b},
+     ]},
 ]
 
 def find_life_event(eid):
@@ -343,6 +410,9 @@ PLAYER_DEFAULTS = {
     "married": False, "in_relationship": False, "partner_name": None, "spouse_name": None,
     "children": 0, "family_happiness": 70, "released": False,
     "transfer_cooldown": 0, "loan_cooldown": 0,
+    "season_stat_gains": {}, "club_played_this_week": False,
+    "_last_flavor_idx": -1, "_life_event_history": {},
+    "season_offers_pending": None,
 }
 
 # --- 改善 5: 讀存檔時對關鍵數值做範圍夾限(clamp),防止手改 JSON 或損壞資料造成崩潰/失衡 ---
@@ -512,12 +582,13 @@ if not st.session_state.created:
             is_gk_or_def = ("門將" in position or "中堅" in position)
 
             # 潛力值:每個屬性有隱藏上限,越後期練習難度越高
+            # 改窄咗初始潛力空間(原本 +10~30),令年輕球員唔會一個賽季內就爆升到頂級數值
             potential = {
-                "shooting": min(99, sh + random.randint(10, 30)),
-                "passing": min(99, pa + random.randint(10, 30)),
-                "dribbling": min(99, dr + random.randint(10, 30)),
-                "stamina": min(99, st_attr + random.randint(10, 30)),
-                "defending": min(99, df + random.randint(10, 30)),
+                "shooting": min(99, sh + random.randint(6, 16)),
+                "passing": min(99, pa + random.randint(6, 16)),
+                "dribbling": min(99, dr + random.randint(6, 16)),
+                "stamina": min(99, st_attr + random.randint(6, 16)),
+                "defending": min(99, df + random.randint(6, 16)),
             }
 
             st.session_state.player = {
@@ -547,6 +618,9 @@ if not st.session_state.created:
                 "married": False, "in_relationship": False, "partner_name": None, "spouse_name": None,
                 "children": 0, "family_happiness": 70, "released": False,
                 "transfer_cooldown": 0, "loan_cooldown": 0,
+                "season_stat_gains": {}, "club_played_this_week": False,
+                "_last_flavor_idx": -1, "_life_event_history": {},
+                "season_offers_pending": None,
             }
             st.session_state.created = True
             st.rerun()
@@ -557,6 +631,11 @@ if not st.session_state.created:
 p = st.session_state.player
 p.setdefault("transfer_cooldown", 0)
 p.setdefault("loan_cooldown", 0)
+p.setdefault("season_stat_gains", {})
+p.setdefault("club_played_this_week", False)
+p.setdefault("_last_flavor_idx", -1)
+p.setdefault("_life_event_history", {})
+p.setdefault("season_offers_pending", None)
 
 DEFENSIVE_POSITION_KEYWORDS = ["中堅", "邊後衛", "防守中場"]
 
@@ -580,19 +659,38 @@ def check_achievements():
             p['new_achievements'].append((aname, adesc))
 
 def simulate_other_matches():
+    """每個對手球會每週固定打一場比賽(唔再係得60%機率),
+    咁樣所有球隊嘅「賽」數就會同過咗嘅週數保持一致、唔會走數。"""
     for club in p['league_table']:
         if club == p['club']:
             continue
-        if random.random() < 0.6:
-            gf = random.randint(0, 3)
-            ga = random.randint(0, 3)
-            p['league_table'][club]['played'] += 1
-            p['league_table'][club]['gf'] += gf
-            p['league_table'][club]['ga'] += ga
-            if gf > ga:
-                p['league_table'][club]['points'] += 3
-            elif gf == ga:
-                p['league_table'][club]['points'] += 1
+        gf = random.randint(0, 3)
+        ga = random.randint(0, 3)
+        p['league_table'][club]['played'] += 1
+        p['league_table'][club]['gf'] += gf
+        p['league_table'][club]['ga'] += ga
+        if gf > ga:
+            p['league_table'][club]['points'] += 3
+        elif gf == ga:
+            p['league_table'][club]['points'] += 1
+
+def _record_own_club_result(gf, ga):
+    entry = p['league_table'][p['club']]
+    entry['played'] += 1
+    entry['gf'] += gf
+    entry['ga'] += ga
+    if gf > ga:
+        entry['points'] += 3
+    elif gf == ga:
+        entry['points'] += 1
+    p['club_played_this_week'] = True
+
+def simulate_own_club_if_needed():
+    """如果玩家呢一週未有透過落場/後備解決自己球隊嗰場比賽(例如成星期淨係揀特訓/休息),
+    就自動幫佢個球隊模擬一場比賽,確保個人所屬球會嘅「賽」數同其他球隊保持同步、唔會唔準確。"""
+    if not p.get('club_played_this_week', False):
+        gf, ga = random.randint(0, 2), random.randint(0, 2)
+        _record_own_club_result(gf, ga)
 
 def apply_age_decline():
     """30歲後每季有機會自然衰退,模擬體能下滑。
@@ -656,6 +754,32 @@ def mid_season_checkin():
         p['coach_trust'] = min(100, p['coach_trust'] + 3)
         p['social_tweets'].insert(0, f"📋 季中檢討：{p['coach_name']}對你上半季嘅表現感到滿意！")
 
+def maybe_generate_season_end_offers():
+    """賽季結束、踏入新一季之前:如果表現出色,有機會收到其他球會嘅轉會報價,
+    等玩家決定轉會定係留守,先至真正開始新賽季。"""
+    ovr_now = get_ovr(p)
+    performed_well = (p['coach_trust'] >= 60) or (ovr_now >= 60) or (p['season_targets_hit'] > 0)
+    if not performed_well or p['is_loaned']:
+        return
+    if random.random() < 0.5:
+        return
+    offers = []
+    candidates = [c for c in p.get('rivals', []) if c != p['club']]
+    if candidates:
+        n_offers = random.randint(1, min(2, len(candidates)))
+        for c in random.sample(candidates, n_offers):
+            wage_mult = random.uniform(1.1, 1.5)
+            offers.append({"club": c, "wage": max(300, int(p['wage'] * wage_mult)), "is_top": False})
+    c_info = ALL_COUNTRIES_DB.get(p['country'])
+    if c_info:
+        top_eligible = [tc for tc in c_info.get('top_clubs', []) if ovr_now >= tc['req'] and tc['name'] != p['club']]
+        if top_eligible and random.random() < 0.4:
+            tc = random.choice(top_eligible)
+            offers.append({"club": tc['name'], "wage": tc['wage'], "is_top": True})
+    if offers:
+        p['season_offers_pending'] = offers
+        p['social_tweets'].insert(0, f"📬 賽季結束，你收到 {len(offers)} 份轉會報價，可以喺下季開始前考慮。")
+
 def maybe_trigger_release():
     """信任度長期跌至谷底,有機會被球會解約,被迫以低薪轉投同聯賽球會。"""
     if p['coach_trust'] <= 5 and not p['is_loaned'] and random.random() < 0.08:
@@ -679,7 +803,12 @@ def next_week():
     p['money'] += p['wage']
     p['fatigue'] = max(0, p['fatigue'] - 16)
     p['match_result'] = None
+    simulate_own_club_if_needed()
     simulate_other_matches()
+    p['club_played_this_week'] = False
+
+    # 教練信任度會隨時間自然回落,唔可以淨係靠一兩次好表現就長期霸住正選席位
+    p['coach_trust'] = max(0, p['coach_trust'] - 1)
 
     # 改善 2: 家庭開支同人工掛鈎,改用人工百分比而非固定金額,
     # 避免起薪低嘅新秀一結婚生仔就長期入不敷支
@@ -710,12 +839,19 @@ def next_week():
         p['loan_cooldown'] -= 1
 
     # 人生事件(更衣室 NPC + 家庭)優先觸發;冇觸發先跌返去日常花絮
+    # 每個事件有冷卻期,避免同一個事件短時間內反覆重複出現
     event_fired = False
     if not p.get('life_event_pending') and not p['call_up_pending'] and not p.get('transfer_offer_pending'):
         if random.random() < 0.25:
-            eligible = [e for e in LIFE_EVENTS if e['condition'](p)]
+            absolute_week = (p['season'] - 1) * 38 + p['week']
+            history = p.setdefault('_life_event_history', {})
+            eligible = [e for e in LIFE_EVENTS if e['condition'](p) and absolute_week - history.get(e['id'], -999) >= 5]
+            if not eligible:
+                eligible = [e for e in LIFE_EVENTS if e['condition'](p)]
             if eligible:
-                p['life_event_pending'] = random.choice(eligible)['id']
+                chosen = random.choice(eligible)
+                p['life_event_pending'] = chosen['id']
+                history[chosen['id']] = absolute_week
                 event_fired = True
     if not event_fired and random.random() < 0.45:
         text, trust_d, money_d = gen_flavor_text(p)
@@ -731,7 +867,9 @@ def next_week():
 
     if p['week'] > 38:
         evaluate_season_target()
+        maybe_generate_season_end_offers()
         apply_age_decline()
+        p['season_stat_gains'] = {}
         st.balloons()
         p['season'] += 1; p['week'] = 1; p['age'] += 1
         p['contract_years_left'] = max(0, p.get('contract_years_left', 3) - 1)
@@ -743,14 +881,13 @@ def next_week():
 # --- 頂部狀態列(取代側邊欄,方便手機使用) ---
 st.title("⚽ 職業生涯主頁")
 
-status_c1, status_c2, status_c3, status_c4, status_c5, status_c6 = st.columns(6)
+status_c1, status_c2, status_c3, status_c4 = st.columns(4)
 status_c1.metric("👤 OVR", ovr)
-status_c2.metric("⚡ 行動點數 AP", f"{p['ap']} / {p['max_ap']}")
-status_c3.metric("💰 週薪", f"${p['wage']:,}")
-status_c4.metric("💵 存款", f"${p['money']:,}")
-status_c5.metric("😫 疲勞", f"{p['fatigue']}%")
-status_c6.metric("🧢 信任度", f"{p['coach_trust']}%")
+status_c2.metric("⚡ AP", f"{p['ap']} / {p['max_ap']}")
+status_c3.metric("😫 疲勞", f"{p['fatigue']}%")
+status_c4.metric("🧢 信任度", f"{p['coach_trust']}%")
 st.caption(f"**{p['name']}** | {p['position']} | {p['club']} | {p['age']}歲 | 🌍 {p['caps']} 次國際賽出場")
+st.caption(f"💰 週薪 ${p['wage']:,}　｜　💵 存款 ${p['money']:,}")
 
 # --- 改善 3 提示(手動存檔):每逢賽季初提醒玩家記得匯出存檔 ---
 if p['week'] == 1:
@@ -806,6 +943,28 @@ tab_home, tab_league, tab_achv, tab_market, tab_career, tab_save = st.tabs(
 with tab_home:
     if p['retired']:
         st.error("你已到達 38 歲,球會決定唔再續約。請到「🎖️ 生涯總結」分頁正式宣布退役。")
+    elif p.get('season_offers_pending'):
+        st.markdown(f"### 📬 新賽季開始前 — 轉會報價")
+        st.caption(f"喺第 {p['season']} 賽季開始之前，有球會對你上季嘅表現感興趣：")
+        for i, offer in enumerate(p['season_offers_pending']):
+            tag = "🏆 豪門邀約" if offer.get('is_top') else "🔁 同級邀約"
+            oc1, oc2 = st.columns([3, 1])
+            oc1.write(f"{tag}：**{offer['club']}** — 週薪 ${offer['wage']:,}")
+            if oc2.button("接受", key=f"season_offer_accept_{i}", use_container_width=True):
+                p['club'] = offer['club']; p['wage'] = offer['wage']
+                p['coach_trust'] = 50; p['is_loaned'] = False
+                p['contract_years_left'] = random.randint(2, 4); p['contract_expired'] = False
+                if offer.get('is_top'):
+                    p['joined_top_club'] = True
+                if p['club'] not in p['league_table']:
+                    p['league_table'][p['club']] = {"points": 0, "played": 0, "gf": 0, "ga": 0}
+                p['social_tweets'].insert(0, f"🔁 你接受報價，轉投 {p['club']}！")
+                p['season_offers_pending'] = None
+                check_achievements()
+                st.rerun()
+        if st.button("❌ 全部拒絕，留守現職球會", key="season_offer_decline_all"):
+            p['season_offers_pending'] = None
+            st.rerun()
     elif p['injury_weeks'] > 0:
         st.error(f"🚑 受傷休養中（剩餘 {p['injury_weeks']} 週）")
         if st.button("⏩ 跳過休養週", key="skip_injury_week"):
@@ -947,15 +1106,17 @@ with tab_home:
                         p['tackles'] += 1; detail = "一次乾淨利落嘅防守，成功化解對方攻勢！"
                     else:
                         p['saves'] += 1; p['season_saves'] += 1; detail = "神級反應，成功拯救球隊！"
-                    trust_inc = 6 if p['match_role'] == "sub" else 4
+                    trust_inc = 3 if p['match_role'] == "sub" else 2
                     p['coach_trust'] = min(100, p['coach_trust'] + trust_inc)
                     trust_msg = f"+{trust_inc}%"
-                    # 表現出色有機會直接喺比賽中成長,唔一定要靠特訓
-                    if random.random() < 0.15:
+                    # 表現出色有機會直接喺比賽中成長,唔一定要靠特訓(機率調低,避免升級過快)
+                    if random.random() < 0.05:
                         growable = [k for k in STAT_KEYS if p[k] < p['potential'][k]]
                         if growable:
                             gk = random.choice(growable)
                             p[gk] = min(p['potential'][gk], p[gk] + 1)
+                            gains = p.setdefault('season_stat_gains', {})
+                            gains[gk] = gains.get(gk, 0) + 1
                             growth_msg = f" 呢場比賽嘅實戰經驗令你嘅{STAT_NAME_MAP[gk]}略有進步！"
                 else:
                     if choice == "defend":
@@ -978,17 +1139,13 @@ with tab_home:
                 else: base_ga += random.choice([0, 1])
                 opponent = p.get('current_opponent', '對手球會')
 
-                p['league_table'][p['club']]['played'] += 1
-                p['league_table'][p['club']]['gf'] += base_gf
-                p['league_table'][p['club']]['ga'] += base_ga
                 if base_gf > base_ga:
-                    p['league_table'][p['club']]['points'] += 3
                     match_result_text = f"{p['club']} 主場獲勝！"
                 elif base_gf == base_ga:
-                    p['league_table'][p['club']]['points'] += 1
                     match_result_text = "雙方打成平手。"
                 else:
                     match_result_text = f"{p['club']} 不敵 {opponent}。"
+                _record_own_club_result(base_gf, base_ga)
 
                 p['match_in_progress'] = False
                 p['match_event'] = None
@@ -1020,10 +1177,18 @@ with tab_home:
                             p['current_opponent'] = random.choice(p['rivals']) if p.get('rivals') else "對手球會"
                             p['match_in_progress'] = True
                         else:
+                            bgf, bga = random.randint(0, 2), random.randint(0, 2)
+                            _record_own_club_result(bgf, bga)
+                            if bgf > bga:
+                                team_line = f"球隊喺你缺陣下 {bgf}-{bga} 獲勝。"
+                            elif bgf == bga:
+                                team_line = f"球隊喺你缺陣下 {bgf}-{bga} 打和。"
+                            else:
+                                team_line = f"球隊喺你缺陣下 {bgf}-{bga} 落敗。"
                             bench_msgs = [
-                                f"{p['coach_name']}決定今場輪換陣容，你今仗屈居後備席，全程未有落場。",
-                                f"教練話想保留你嘅體能應付下一場硬仗，你今場冇被派上陣。",
-                                f"對方今仗派出強陣，{p['coach_name']}選擇更穩陣嘅陣容，你今場未有出場機會。",
+                                f"{p['coach_name']}決定今場輪換陣容，你今仗屈居後備席，全程未有落場。{team_line}",
+                                f"教練話想保留你嘅體能應付下一場硬仗，你今場冇被派上陣。{team_line}",
+                                f"對方今仗派出強陣，{p['coach_name']}選擇更穩陣嘅陣容，你今場未有出場機會。{team_line}",
                             ]
                             p['bench_result'] = {"message": random.choice(bench_msgs), "fatigue_add": 0}
                         st.rerun()
@@ -1042,8 +1207,11 @@ with tab_home:
                 t_choice = st.selectbox("訓練項目", list(t_map.keys()), key="train_select")
                 stat_key = t_map[t_choice]
                 gap = p['potential'][stat_key] - p[stat_key]
-                train_chance = max(15, min(90, 30 + gap * 3))
-                st.caption(f"💡 今次特訓進步機率約 {train_chance}%（越接近潛力上限，進步越難）")
+                season_gain = p.get('season_stat_gains', {}).get(stat_key, 0)
+                # 改善進度過快嘅問題:進步機率大幅降低,而且同一賽季內越練得多同一項,
+                # 遞減效應就越明顯,避免一個賽季就練爆某項數值
+                train_chance = max(5, min(45, int(12 + gap * 1.2 - season_gain * 4)))
+                st.caption(f"💡 今次特訓進步機率約 {train_chance}%（越接近潛力上限、今季練得越多同一項，進步越難）")
                 if st.button("💪 開始特訓", use_container_width=True, disabled=(p['ap'] < 1), key="train_btn"):
                     p['ap'] -= 1; p['fatigue'] = min(100, p['fatigue'] + 15)
                     overtrain_injury = p['fatigue'] >= 85 and random.random() < 0.12
@@ -1052,7 +1220,9 @@ with tab_home:
                         st.error(f"⚠️ 疲勞過度導致輕微拉傷，需要休養 {p['injury_weeks']} 週！")
                     elif random.randint(1, 100) <= train_chance:
                         p[stat_key] = min(p['potential'][stat_key], p[stat_key] + 1)
-                        p['coach_trust'] = min(100, p['coach_trust'] + 2)
+                        p['coach_trust'] = min(100, p['coach_trust'] + 1)
+                        gains = p.setdefault('season_stat_gains', {})
+                        gains[stat_key] = gains.get(stat_key, 0) + 1
                         st.success(f"能力獲得提升，{p['coach_name']}對你表示肯定！")
                     else:
                         st.warning(f"今日狀態麻麻，{p['coach_name']}話你仲需要多啲時間磨練，未見明顯進步。")
