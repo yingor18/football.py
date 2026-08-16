@@ -1,7 +1,7 @@
 import streamlit as st
 import random
 import json
-import plotly.graph_objects as go
+import pandas as pd
 
 st.set_page_config(page_title="綠茵傳奇 Pro - 動態局勢版", page_icon="⚽", layout="wide")
 
@@ -131,6 +131,11 @@ if not st.session_state.created:
             try:
                 data = json.load(uploaded)
                 data['achievements'] = set(data.get('achievements', []))
+                if 'potential' not in data:
+                    data['potential'] = {
+                        "shooting": min(99, data['shooting'] + 20), "passing": min(99, data['passing'] + 20),
+                        "dribbling": min(99, data['dribbling'] + 20), "stamina": min(99, data['stamina'] + 20),
+                    }
                 st.session_state.player = data
                 st.session_state.created = True
                 st.success("存檔讀取成功！")
@@ -196,6 +201,14 @@ if not st.session_state.created:
             npc_names = random.sample(NAME_POOL, 3)
             is_gk_or_def = ("門將" in position or "中堅" in position)
 
+            # 潛力值:每個屬性有隱藏上限,越後期練習難度越高
+            potential = {
+                "shooting": min(99, sh + random.randint(10, 30)),
+                "passing": min(99, pa + random.randint(10, 30)),
+                "dribbling": min(99, dr + random.randint(10, 30)),
+                "stamina": min(99, st_attr + random.randint(10, 30)),
+            }
+
             st.session_state.player = {
                 "name": player_name, "position": position, "age": 17,
                 "country": selected_country, "club": start_club_obj['name'],
@@ -216,6 +229,7 @@ if not st.session_state.created:
                     "saves": 15 if "門將" in position else 0,
                 },
                 "caps": 0, "call_up_pending": False, "retired": False,
+                "potential": potential,
             }
             st.session_state.created = True
             st.rerun()
@@ -312,21 +326,25 @@ def next_week():
 # --- 頂部狀態列(取代側邊欄,方便手機使用) ---
 st.title("⚽ 職業生涯主頁")
 
-status_c1, status_c2, status_c3, status_c4, status_c5 = st.columns(5)
+status_c1, status_c2, status_c3, status_c4, status_c5, status_c6 = st.columns(6)
 status_c1.metric("👤 OVR", ovr)
-status_c2.metric("💰 週薪", f"${p['wage']:,}")
-status_c3.metric("💵 存款", f"${p['money']:,}")
-status_c4.metric("😫 疲勞", f"{p['fatigue']}%")
-status_c5.metric("🧢 信任度", f"{p['coach_trust']}%")
+status_c2.metric("⚡ 行動點數 AP", f"{p['ap']} / {p['max_ap']}")
+status_c3.metric("💰 週薪", f"${p['wage']:,}")
+status_c4.metric("💵 存款", f"${p['money']:,}")
+status_c5.metric("😫 疲勞", f"{p['fatigue']}%")
+status_c6.metric("🧢 信任度", f"{p['coach_trust']}%")
 st.caption(f"**{p['name']}** | {p['position']} | {p['club']} | {p['age']}歲 | 🌍 {p['caps']} 次國際賽出場")
 
-with st.expander("📈 查看能力雷達圖"):
-    fig = go.Figure(data=go.Scatterpolar(
-      r=[p['shooting'], p['passing'], p['dribbling'], p['stamina']],
-      theta=['射門', '傳球', '盤帶', '體能'], fill='toself', line_color='#00CC96'
-    ))
-    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[20, 100])), showlegend=False, margin=dict(l=20, r=20, t=20, b=20), height=250)
-    st.plotly_chart(fig, use_container_width=True)
+with st.expander("📋 查看能力數值"):
+    pot = p['potential']
+    stat_labels = [("射門", "shooting"), ("傳球", "passing"), ("盤帶", "dribbling"), ("體能", "stamina")]
+    for label, key in stat_labels:
+        cur = p[key]
+        cap = pot[key]
+        filled = int(cur / 99 * 20)
+        bar = "█" * filled + "░" * (20 - filled)
+        near_cap = " 🔒接近極限" if cur >= cap - 3 else ""
+        st.text(f"{label}｜{bar}｜{cur} / 潛力上限約{cap}{near_cap}")
 
 if p['new_achievements']:
     for aname, adesc in p['new_achievements']:
@@ -447,6 +465,7 @@ with tab_home:
                 fatigue_add = 20 if p['match_role'] == "starter" else 10
                 p['fatigue'] = min(100, p['fatigue'] + fatigue_add)
 
+                growth_msg = ""
                 if success:
                     if choice == "shoot":
                         p['goals'] += 1; p['season_goals'] += 1; detail = "冷靜處理，皮球應聲入網！"
@@ -457,6 +476,14 @@ with tab_home:
                     trust_inc = 6 if p['match_role'] == "sub" else 4
                     p['coach_trust'] = min(100, p['coach_trust'] + trust_inc)
                     trust_msg = f"+{trust_inc}%"
+                    # 表現出色有機會直接喺比賽中成長,唔一定要靠特訓
+                    if random.random() < 0.15:
+                        growable = [k for k in ["shooting", "passing", "dribbling", "stamina"] if p[k] < p['potential'][k]]
+                        if growable:
+                            gk = random.choice(growable)
+                            p[gk] = min(p['potential'][gk], p[gk] + 1)
+                            stat_name_map = {"shooting": "射門", "passing": "傳球", "dribbling": "盤帶", "stamina": "體能"}
+                            growth_msg = f" 呢場比賽嘅實戰經驗令你嘅{stat_name_map[gk]}略有進步！"
                 else:
                     detail = "關鍵處理欠佳，被對方成功解圍/撲出。"
                     p['coach_trust'] = max(0, p['coach_trust'] - 3)
@@ -483,7 +510,7 @@ with tab_home:
                 p['match_in_progress'] = False
                 p['match_event'] = None
                 p['match_result'] = {
-                    "success": success, "detail": detail, "trust_change": trust_msg,
+                    "success": success, "detail": detail + growth_msg, "trust_change": trust_msg,
                     "fatigue_add": fatigue_add, "team_score": (base_gf, base_ga), "opponent": opponent
                 }
                 p['social_tweets'].insert(0, f"賽後快訊：{match_result_text}")
@@ -508,16 +535,25 @@ with tab_home:
 
             with c2:
                 st.subheader("🏋️ 隊內特訓")
-                st.caption("消耗 1 AP | 信任+3, 疲勞+15%")
-                t_choice = st.selectbox("訓練項目", ["🎯 射門/搶斷", "🅰️ 傳球組織", "⚡ 盤帶速度", "💪 體能加強"])
+                st.caption("消耗 1 AP | 信任+2, 疲勞+15% | 效果視乎潛力與狀態浮動")
+                t_map = {"🎯 射門/搶斷": "shooting", "🅰️ 傳球組織": "passing", "⚡ 盤帶速度": "dribbling", "💪 體能加強": "stamina"}
+                t_choice = st.selectbox("訓練項目", list(t_map.keys()))
+                stat_key = t_map[t_choice]
+                gap = p['potential'][stat_key] - p[stat_key]
+                train_chance = max(15, min(90, 30 + gap * 3))
+                st.caption(f"💡 今次特訓進步機率約 {train_chance}%（越接近潛力上限，進步越難）")
                 if st.button("💪 開始特訓", use_container_width=True, disabled=(p['ap'] < 1)):
                     p['ap'] -= 1; p['fatigue'] = min(100, p['fatigue'] + 15)
-                    p['coach_trust'] = min(100, p['coach_trust'] + 3)
-                    if "射門" in t_choice: p['shooting'] += 1
-                    elif "傳球" in t_choice: p['passing'] += 1
-                    elif "盤帶" in t_choice: p['dribbling'] += 1
-                    else: p['stamina'] += 1
-                    st.success("能力獲得提升，教練對你表示肯定！")
+                    overtrain_injury = p['fatigue'] >= 85 and random.random() < 0.12
+                    if overtrain_injury:
+                        p['injury_weeks'] = random.randint(1, 2)
+                        st.error(f"⚠️ 疲勞過度導致輕微拉傷，需要休養 {p['injury_weeks']} 週！")
+                    elif random.randint(1, 100) <= train_chance:
+                        p[stat_key] = min(p['potential'][stat_key], p[stat_key] + 1)
+                        p['coach_trust'] = min(100, p['coach_trust'] + 2)
+                        st.success(f"能力獲得提升，{p['coach_name']}對你表示肯定！")
+                    else:
+                        st.warning(f"今日狀態麻麻，{p['coach_name']}話你仲需要多啲時間磨練，未見明顯進步。")
                     check_achievements()
                     if p['ap'] <= 0: next_week()
                     st.rerun()
@@ -543,14 +579,42 @@ with tab_home:
 # ============ TAB 2: 聯賽榜 ============
 with tab_league:
     st.subheader(f"📊 {ALL_COUNTRIES_DB[p['country']]['league']} 積分榜")
+    st.caption("🟢 綠色 = 升班區（頭2名）　🔴 紅色 = 降班區（尾2名）　🟡 黃色 = 你所屬球隊")
+
     table_rows = []
     for club, stats in p['league_table'].items():
         gd = stats['gf'] - stats['ga']
-        table_rows.append((club, stats['played'], stats['points'], gd))
-    table_rows.sort(key=lambda x: (-x[2], -x[3]))
-    for rank, (club, played, points, gd) in enumerate(table_rows, start=1):
-        marker = "👉 " if club == p['club'] else ""
-        st.write(f"{rank}. {marker}**{club}** — {points} 分 | {played} 場 | 淨勝球 {gd:+d}")
+        table_rows.append({"球隊": club, "賽": stats['played'], "入球": stats['gf'], "失球": stats['ga'], "淨勝球": gd, "積分": stats['points']})
+    table_rows.sort(key=lambda x: (-x['積分'], -x['淨勝球']))
+
+    n = len(table_rows)
+    df = pd.DataFrame(table_rows)
+    df.insert(0, "名次", range(1, n + 1))
+    medal = {1: "🥇", 2: "🥈", 3: "🥉"}
+    df["名次"] = df["名次"].apply(lambda r: f"{medal.get(r, '')} {r}".strip())
+
+    def highlight_row(row):
+        idx = row.name
+        rank_num = idx + 1
+        club_name = row["球隊"]
+        if club_name == p['club']:
+            return ['background-color: #FFF3B0; font-weight: bold'] * len(row)
+        elif rank_num <= 2:
+            return ['background-color: #D6F5D6'] * len(row)
+        elif rank_num > n - 2:
+            return ['background-color: #FADADD'] * len(row)
+        return [''] * len(row)
+
+    styled = df.style.apply(highlight_row, axis=1)
+    st.dataframe(styled, use_container_width=True, hide_index=True)
+
+    my_rank = next(i for i, row in enumerate(table_rows, start=1) if row["球隊"] == p['club'])
+    if my_rank <= 2:
+        st.success(f"🟢 你嘅球隊目前排第 {my_rank} 位，處於升班區！")
+    elif my_rank > n - 2:
+        st.error(f"🔴 你嘅球隊目前排第 {my_rank} 位，處於降班區，要打醒精神！")
+    else:
+        st.info(f"⚪ 你嘅球隊目前排第 {my_rank} 位，中游位置。")
 
 # ============ TAB 3: 成就 ============
 with tab_achv:
