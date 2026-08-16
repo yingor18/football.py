@@ -135,7 +135,12 @@ if not st.session_state.created:
                     data['potential'] = {
                         "shooting": min(99, data['shooting'] + 20), "passing": min(99, data['passing'] + 20),
                         "dribbling": min(99, data['dribbling'] + 20), "stamina": min(99, data['stamina'] + 20),
+                        "defending": min(99, data.get('defending', 40) + 20),
                     }
+                if 'defending' not in data:
+                    data['defending'] = 40
+                if 'defending' not in data['potential']:
+                    data['potential']['defending'] = min(99, data['defending'] + 20)
                 st.session_state.player = data
                 st.session_state.created = True
                 st.success("存檔讀取成功！")
@@ -185,13 +190,13 @@ if not st.session_state.created:
         if st.button("🚀 簽署職業合約並開始", type="primary"):
             player_name = name.strip() if name.strip() else "新星小將"
 
-            if "門將" in position: sh, pa, dr, st_attr = 30, 50, 40, 68
-            elif "中堅" in position: sh, pa, dr, st_attr = 38, 52, 45, 70
-            elif "邊後衛" in position: sh, pa, dr, st_attr = 45, 60, 60, 68
-            elif "防守中場" in position: sh, pa, dr, st_attr = 48, 65, 55, 68
-            elif "進攻中場" in position: sh, pa, dr, st_attr = 58, 68, 62, 62
-            elif "翼鋒" in position: sh, pa, dr, st_attr = 60, 58, 68, 62
-            else: sh, pa, dr, st_attr = 65, 52, 60, 62
+            if "門將" in position: sh, pa, dr, st_attr, df = 30, 50, 40, 68, 45
+            elif "中堅" in position: sh, pa, dr, st_attr, df = 38, 52, 45, 70, 68
+            elif "邊後衛" in position: sh, pa, dr, st_attr, df = 45, 60, 60, 68, 58
+            elif "防守中場" in position: sh, pa, dr, st_attr, df = 48, 65, 55, 68, 60
+            elif "進攻中場" in position: sh, pa, dr, st_attr, df = 58, 68, 62, 62, 35
+            elif "翼鋒" in position: sh, pa, dr, st_attr, df = 60, 58, 68, 62, 30
+            else: sh, pa, dr, st_attr, df = 65, 52, 60, 62, 25
 
             rivals = random.sample(c_info["rivals"], min(9, len(c_info["rivals"])))
             league_table = {start_club_obj['name']: {"points": 0, "played": 0, "gf": 0, "ga": 0}}
@@ -207,15 +212,16 @@ if not st.session_state.created:
                 "passing": min(99, pa + random.randint(10, 30)),
                 "dribbling": min(99, dr + random.randint(10, 30)),
                 "stamina": min(99, st_attr + random.randint(10, 30)),
+                "defending": min(99, df + random.randint(10, 30)),
             }
 
             st.session_state.player = {
                 "name": player_name, "position": position, "age": 17,
                 "country": selected_country, "club": start_club_obj['name'],
                 "is_loaned": False, "parent_club": None, "wage": start_club_obj['wage'], "money": 2000,
-                "shooting": sh, "passing": pa, "dribbling": dr, "stamina": st_attr,
+                "shooting": sh, "passing": pa, "dribbling": dr, "stamina": st_attr, "defending": df,
                 "ap": 3, "max_ap": 3, "fatigue": 0, "chemistry": 40, "form": "平穩",
-                "injury_weeks": 0, "coach_trust": 45, "matches": 0, "goals": 0, "assists": 0, "saves": 0,
+                "injury_weeks": 0, "coach_trust": 45, "matches": 0, "goals": 0, "assists": 0, "saves": 0, "tackles": 0,
                 "season": 1, "week": 1,
                 "social_tweets": [f"新聞: {player_name} 正式加盟 {start_club_obj['name']}！"],
                 "match_in_progress": False, "match_event": None, "match_role": "bench", "match_result": None,
@@ -239,9 +245,16 @@ if not st.session_state.created:
 # --- 2. 遊戲主體 ---
 p = st.session_state.player
 
+DEFENSIVE_POSITION_KEYWORDS = ["中堅", "邊後衛", "防守中場"]
+
+def is_defensive_position(position):
+    return any(k in position for k in DEFENSIVE_POSITION_KEYWORDS)
+
 def get_ovr(player):
-    if "門將" in player['position'] or "中堅" in player['position']:
+    if "門將" in player['position']:
         return int(player['stamina'] * 0.4 + player['passing'] * 0.3 + player['dribbling'] * 0.2 + player['shooting'] * 0.1)
+    elif is_defensive_position(player['position']):
+        return int(player['defending'] * 0.35 + player['stamina'] * 0.25 + player['passing'] * 0.25 + player['dribbling'] * 0.15)
     else:
         return int(player['shooting'] * 0.35 + player['passing'] * 0.3 + player['dribbling'] * 0.25 + player['stamina'] * 0.1)
 
@@ -272,7 +285,7 @@ def apply_age_decline():
     """30歲後每季有機會自然衰退,模擬體能下滑"""
     if p['age'] >= 30:
         decline = random.randint(1, 3)
-        stat_keys = ["shooting", "passing", "dribbling", "stamina"]
+        stat_keys = ["shooting", "passing", "dribbling", "stamina", "defending"]
         for _ in range(decline):
             k = random.choice(stat_keys)
             p[k] = max(20, p[k] - 1)
@@ -305,7 +318,7 @@ def next_week():
     p['week'] += 1
     p['ap'] = p['max_ap']
     p['money'] += p['wage']
-    p['fatigue'] = max(0, p['fatigue'] - 12)
+    p['fatigue'] = max(0, p['fatigue'] - 16)
     p['match_result'] = None
     simulate_other_matches()
     if random.random() < 0.45:
@@ -338,7 +351,7 @@ st.caption(f"**{p['name']}** | {p['position']} | {p['club']} | {p['age']}歲 | �
 with st.expander("📋 查看能力數值"):
     st.caption("ℹ️ 每項屬性喺生涯開始時已隨機決定咗一個隱藏「潛力上限」（初始值 +10~30，上限99）。距離上限越遠，特訓/比賽進步機率越高；越接近上限，進步越困難。")
     pot = p['potential']
-    stat_labels = [("射門", "shooting"), ("傳球", "passing"), ("盤帶", "dribbling"), ("體能", "stamina")]
+    stat_labels = [("射門", "shooting"), ("傳球", "passing"), ("盤帶", "dribbling"), ("體能", "stamina"), ("防守", "defending")]
     for label, key in stat_labels:
         cur = p[key]
         cap = pot[key]
@@ -422,7 +435,7 @@ with tab_home:
             bres = p['bench_result']
             st.markdown("### 🪑 教練今場排陣")
             st.warning(bres['message'])
-            st.caption(f"📈 影響：疲勞 +{bres['fatigue_add']}%（隨隊坐足全場）")
+            st.caption(f"📈 影響：冇落場,疲勞維持不變（+{bres['fatigue_add']}%）")
             if st.button("確定並返回日程 ->", type="primary", key="bench_confirm"):
                 p['bench_result'] = None
                 if p['ap'] <= 0: next_week()
@@ -462,6 +475,11 @@ with tab_home:
                     if st.button("🎯 大力抽射球門左上死角", use_container_width=True): choice = "shoot"
                     if st.button("👟 冷靜推射右下角", use_container_width=True): choice = "shoot"
                     if st.button("💥 踢勺子踢法 (Panenka)", use_container_width=True): choice = "shoot"
+                elif evt['type'] == "defend":
+                    st.caption(f"💡 防守成功率約 {success_rate(p['defending'])}%（受防守與默契影響）")
+                    if st.button("🛡️ 頂身拼搶解圍", use_container_width=True): choice = "defend"
+                    if st.button("🧱 回撤補位協防", use_container_width=True): choice = "defend"
+                    if st.button("⚔️ 強硬正面攔截", use_container_width=True): choice = "defend"
                 else:
                     st.caption(f"💡 成功率參考：射門 {success_rate(p['shooting'])}% ｜ 傳球 {success_rate(p['passing'])}% ｜ 盤帶 {success_rate(p['dribbling'])}%")
                     if st.button("🚀 果斷起腳轟門", use_container_width=True): choice = "shoot"
@@ -469,8 +487,11 @@ with tab_home:
                     if st.button("⚡ 強行盤帶連過一人", use_container_width=True): choice = "dribble"
 
             if choice:
-                check_attr = p['shooting'] if choice == "shoot" else (p['passing'] if choice == "pass" else p['dribbling'])
-                if choice == "save": check_attr = p['stamina']
+                if choice == "shoot": check_attr = p['shooting']
+                elif choice == "pass": check_attr = p['passing']
+                elif choice == "dribble": check_attr = p['dribbling']
+                elif choice == "defend": check_attr = p['defending']
+                else: check_attr = p['stamina']  # save
 
                 success = (random.randint(1, 100) + int(p['chemistry'] / 10)) < check_attr
                 fatigue_add = 20 if p['match_role'] == "starter" else 10
@@ -482,6 +503,8 @@ with tab_home:
                         p['goals'] += 1; p['season_goals'] += 1; detail = "冷靜處理，皮球應聲入網！"
                     elif choice == "pass":
                         p['assists'] += 1; p['season_assists'] += 1; detail = "精準傳球送出致命助攻！"
+                    elif choice == "defend":
+                        p['tackles'] += 1; detail = "一次乾淨利落嘅防守，成功化解對方攻勢！"
                     else:
                         p['saves'] += 1; p['season_saves'] += 1; detail = "神級反應，成功拯救球隊！"
                     trust_inc = 6 if p['match_role'] == "sub" else 4
@@ -489,14 +512,17 @@ with tab_home:
                     trust_msg = f"+{trust_inc}%"
                     # 表現出色有機會直接喺比賽中成長,唔一定要靠特訓
                     if random.random() < 0.15:
-                        growable = [k for k in ["shooting", "passing", "dribbling", "stamina"] if p[k] < p['potential'][k]]
+                        growable = [k for k in ["shooting", "passing", "dribbling", "stamina", "defending"] if p[k] < p['potential'][k]]
                         if growable:
                             gk = random.choice(growable)
                             p[gk] = min(p['potential'][gk], p[gk] + 1)
-                            stat_name_map = {"shooting": "射門", "passing": "傳球", "dribbling": "盤帶", "stamina": "體能"}
+                            stat_name_map = {"shooting": "射門", "passing": "傳球", "dribbling": "盤帶", "stamina": "體能", "defending": "防守"}
                             growth_msg = f" 呢場比賽嘅實戰經驗令你嘅{stat_name_map[gk]}略有進步！"
                 else:
-                    detail = "關鍵處理欠佳，被對方成功解圍/撲出。"
+                    if choice == "defend":
+                        detail = "回防步伐慢半拍，被對方輕鬆突破防線。"
+                    else:
+                        detail = "關鍵處理欠佳，被對方成功解圍/撲出。"
                     p['coach_trust'] = max(0, p['coach_trust'] - 3)
                     trust_msg = "-3%"
 
@@ -548,21 +574,23 @@ with tab_home:
                             p['current_opponent'] = random.choice(p['rivals']) if p.get('rivals') else "對手球會"
                             p['match_in_progress'] = True
                         else:
-                            p['fatigue'] = min(100, p['fatigue'] + 5)
                             bench_msgs = [
                                 f"{p['coach_name']}決定今場輪換陣容，你今仗屈居後備席，全程未有落場。",
                                 f"教練話想保留你嘅體能應付下一場硬仗，你今場冇被派上陣。",
                                 f"對方今仗派出強陣，{p['coach_name']}選擇更穩陣嘅陣容，你今場未有出場機會。",
                             ]
-                            p['bench_result'] = {"message": random.choice(bench_msgs), "fatigue_add": 5}
+                            p['bench_result'] = {"message": random.choice(bench_msgs), "fatigue_add": 0}
                         st.rerun()
 
             with c2:
                 st.subheader("🏋️ 隊內特訓")
                 st.caption("消耗 1 AP | 信任+2, 疲勞+15% | 效果視乎潛力與狀態浮動")
                 is_gk = "門將" in p['position']
+                is_def = is_defensive_position(p['position'])
                 if is_gk:
                     t_map = {"🧤 撲救反應訓練": "stamina", "🗣️ 防線指揮訓練": "passing", "🚪 出擊步法訓練": "dribbling"}
+                elif is_def:
+                    t_map = {"🛡️ 防守站位訓練": "defending", "🎯 射門/搶截訓練": "shooting", "🅰️ 傳球組織": "passing", "⚡ 盤帶速度": "dribbling", "💪 體能加強": "stamina"}
                 else:
                     t_map = {"🎯 射門/搶斷": "shooting", "🅰️ 傳球組織": "passing", "⚡ 盤帶速度": "dribbling", "💪 體能加強": "stamina"}
                 t_choice = st.selectbox("訓練項目", list(t_map.keys()))
@@ -698,11 +726,12 @@ with tab_market:
 # ============ TAB 5: 生涯總結 / 退役 ============
 with tab_career:
     st.subheader("🎖️ 生涯數據總結")
-    cc1, cc2, cc3, cc4 = st.columns(4)
+    cc1, cc2, cc3, cc4, cc5 = st.columns(5)
     cc1.metric("出場", p['matches'])
     cc2.metric("入球", p['goals'])
     cc3.metric("助攻", p['assists'])
     cc4.metric("撲救", p['saves'])
+    cc5.metric("防守成功", p.get('tackles', 0))
     st.write(f"🏅 成就解鎖：{len(p['achievements'])} / {len(ACHIEVEMENTS)}")
     st.write(f"🎯 賽季 KPI 達標次數：{p['season_targets_hit']} 次")
     st.write(f"🌍 國家隊出場：{p['caps']} 次")
