@@ -26,6 +26,7 @@ ALL_COUNTRIES_DB = {
             {"name": "熱刺 (Tottenham)", "req": 78, "wage": 65000},
             {"name": "車路士 (Chelsea)", "req": 81, "wage": 82000},
             {"name": "阿仙奴 (Arsenal)", "req": 83, "wage": 85000},
+            {"name": "曼聯 (Man United)", "req": 84, "wage": 100000},
             {"name": "利物浦 (Liverpool)", "req": 86, "wage": 120000},
             {"name": "曼城 (Man City)", "req": 88, "wage": 130000},
         ]
@@ -171,6 +172,7 @@ def gen_flavor_text(p):
 
 # --- 人生事件系統 (更衣室 NPC + 家庭因素) ---
 STAT_NAME_MAP = {"shooting": "射門", "passing": "傳球", "dribbling": "盤帶", "stamina": "體能", "defending": "防守"}
+STAT_KEYS = ["shooting", "passing", "dribbling", "stamina", "defending"]
 
 def _ev_rival_confront_a(p):
     p['chemistry'] = max(0, p['chemistry'] - 8)
@@ -340,7 +342,55 @@ PLAYER_DEFAULTS = {
     "transfer_offer_pending": None, "life_event_pending": None,
     "married": False, "in_relationship": False, "partner_name": None, "spouse_name": None,
     "children": 0, "family_happiness": 70, "released": False,
+    "transfer_cooldown": 0, "loan_cooldown": 0,
 }
+
+# --- 改善 5: 讀存檔時對關鍵數值做範圍夾限(clamp),防止手改 JSON 或損壞資料造成崩潰/失衡 ---
+STAT_RANGE = (1, 99)
+AGE_RANGE = (16, 45)
+AP_RANGE = (0, 10)
+PERCENT_RANGE = (0, 100)
+
+def _clamp(value, lo, hi, default):
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, v))
+
+def sanitize_player_data(data):
+    """對讀入嘅存檔數值做合理範圍夾限,避免損壞/竄改嘅存檔令遊戲數值失控或崩潰。"""
+    for k in STAT_KEYS:
+        data[k] = _clamp(data.get(k), *STAT_RANGE, PLAYER_DEFAULTS[k])
+
+    data['age'] = _clamp(data.get('age'), *AGE_RANGE, PLAYER_DEFAULTS['age'])
+    data['ap'] = _clamp(data.get('ap'), *AP_RANGE, PLAYER_DEFAULTS['ap'])
+    data['max_ap'] = _clamp(data.get('max_ap'), 1, 10, PLAYER_DEFAULTS['max_ap'])
+    data['fatigue'] = _clamp(data.get('fatigue'), *PERCENT_RANGE, PLAYER_DEFAULTS['fatigue'])
+    data['chemistry'] = _clamp(data.get('chemistry'), *PERCENT_RANGE, PLAYER_DEFAULTS['chemistry'])
+    data['coach_trust'] = _clamp(data.get('coach_trust'), *PERCENT_RANGE, PLAYER_DEFAULTS['coach_trust'])
+    data['family_happiness'] = _clamp(data.get('family_happiness'), *PERCENT_RANGE, PLAYER_DEFAULTS['family_happiness'])
+
+    for k in ["money", "wage", "goals", "assists", "saves", "tackles", "matches", "caps",
+              "season", "week", "season_goals", "season_assists", "season_saves",
+              "season_targets_hit", "contract_years_left", "children", "injury_weeks"]:
+        try:
+            v = int(data.get(k, PLAYER_DEFAULTS.get(k, 0)))
+        except (TypeError, ValueError):
+            v = PLAYER_DEFAULTS.get(k, 0)
+        data[k] = max(0, v)
+
+    data['week'] = min(data['week'], 39)
+
+    # 潛力上限一定要 >= 現有屬性值,而且唔可以超過 99
+    stat_keys = STAT_KEYS
+    potential = data.get('potential') or {}
+    for k in stat_keys:
+        cap = _clamp(potential.get(k), *STAT_RANGE, min(99, data[k] + 20))
+        potential[k] = max(cap, data[k])
+    data['potential'] = potential
+
+    return data
 
 def load_and_validate_save(uploaded_file):
     """讀取存檔 JSON,補齊缺少嘅欄位,並回傳可用嘅 player dict。錯誤會拋出例外由呼叫方處理。"""
@@ -353,7 +403,7 @@ def load_and_validate_save(uploaded_file):
         data["country"] = list(ALL_COUNTRIES_DB.keys())[0]
     data['achievements'] = set(data.get('achievements') or [])
 
-    stat_keys = ["shooting", "passing", "dribbling", "stamina", "defending"]
+    stat_keys = STAT_KEYS
     base_stats = data.get('base_stats')
     if not base_stats:
         base_stats = {k: data.get(k, PLAYER_DEFAULTS[k]) for k in stat_keys}
@@ -370,6 +420,8 @@ def load_and_validate_save(uploaded_file):
 
     if not data.get('season_target'):
         data['season_target'] = {"goals": 5, "assists": 2, "saves": 0}
+
+    data = sanitize_player_data(data)
 
     return data
 
@@ -494,6 +546,7 @@ if not st.session_state.created:
                 "transfer_offer_pending": None, "life_event_pending": None,
                 "married": False, "in_relationship": False, "partner_name": None, "spouse_name": None,
                 "children": 0, "family_happiness": 70, "released": False,
+                "transfer_cooldown": 0, "loan_cooldown": 0,
             }
             st.session_state.created = True
             st.rerun()
@@ -502,6 +555,8 @@ if not st.session_state.created:
 
 # --- 2. 遊戲主體 ---
 p = st.session_state.player
+p.setdefault("transfer_cooldown", 0)
+p.setdefault("loan_cooldown", 0)
 
 DEFENSIVE_POSITION_KEYWORDS = ["中堅", "邊後衛", "防守中場"]
 
@@ -552,7 +607,7 @@ def apply_age_decline():
     else:
         decline = random.randint(3, 5)
 
-    stat_keys = ["shooting", "passing", "dribbling", "stamina", "defending"]
+    stat_keys = STAT_KEYS
     base = p.get('base_stats') or {k: p[k] for k in stat_keys}
     for _ in range(decline):
         weights = [max(1, p[k] - base.get(k, p[k]) + 1) for k in stat_keys]
@@ -626,8 +681,14 @@ def next_week():
     p['match_result'] = None
     simulate_other_matches()
 
-    # 家庭開支(結婚同/或育有子女會有持續開支)
-    family_cost = (100 if p['married'] else 0) + 60 * p.get('children', 0)
+    # 改善 2: 家庭開支同人工掛鈎,改用人工百分比而非固定金額,
+    # 避免起薪低嘅新秀一結婚生仔就長期入不敷支
+    wage_ref = max(p['wage'], 300)
+    family_cost = 0
+    if p['married']:
+        family_cost += int(wage_ref * 0.12)
+    if p.get('children', 0) > 0:
+        family_cost += int(wage_ref * 0.05) * p['children']
     if family_cost:
         p['money'] = max(0, p['money'] - family_cost)
 
@@ -641,6 +702,12 @@ def next_week():
         p['chemistry'] = min(100, p['chemistry'] + 1)
 
     maybe_trigger_release()
+
+    # 轉會/外借冷卻時間每週遞減
+    if p.get('transfer_cooldown', 0) > 0:
+        p['transfer_cooldown'] -= 1
+    if p.get('loan_cooldown', 0) > 0:
+        p['loan_cooldown'] -= 1
 
     # 人生事件(更衣室 NPC + 家庭)優先觸發;冇觸發先跌返去日常花絮
     event_fired = False
@@ -685,6 +752,10 @@ status_c5.metric("😫 疲勞", f"{p['fatigue']}%")
 status_c6.metric("🧢 信任度", f"{p['coach_trust']}%")
 st.caption(f"**{p['name']}** | {p['position']} | {p['club']} | {p['age']}歲 | 🌍 {p['caps']} 次國際賽出場")
 
+# --- 改善 3 提示(手動存檔):每逢賽季初提醒玩家記得匯出存檔 ---
+if p['week'] == 1:
+    st.info("💾 新一季開始咗！記得定期到「💾 存檔」分頁下載你嘅進度，以免重新整理頁面後遺失。")
+
 _family_bits = []
 if p.get('married'):
     _family_bits.append(f"💍 已婚（{p.get('spouse_name') or '配偶'}）")
@@ -698,16 +769,12 @@ _family_bits.append(f"🏠 家庭幸福感 {p.get('family_happiness', 70)}%")
 st.caption(" ｜ ".join(_family_bits))
 
 with st.expander("📋 查看能力數值"):
-    st.caption("ℹ️ 每項屬性喺生涯開始時已隨機決定咗一個隱藏「潛力上限」（初始值 +10~30，上限99）。距離上限越遠，特訓/比賽進步機率越高；越接近上限，進步越困難。")
-    pot = p['potential']
     stat_labels = [("射門", "shooting"), ("傳球", "passing"), ("盤帶", "dribbling"), ("體能", "stamina"), ("防守", "defending")]
     for label, key in stat_labels:
         cur = p[key]
-        cap = pot[key]
         filled = int(cur / 99 * 20)
         bar = "█" * filled + "░" * (20 - filled)
-        near_cap = " 🔒接近極限" if cur >= cap - 3 else ""
-        st.text(f"{label}｜{bar}｜{cur} / 潛力上限約{cap}{near_cap}")
+        st.text(f"{label}｜{bar}｜{cur}")
 
 if p['new_achievements']:
     for aname, adesc in p['new_achievements']:
@@ -741,12 +808,12 @@ with tab_home:
         st.error("你已到達 38 歲,球會決定唔再續約。請到「🎖️ 生涯總結」分頁正式宣布退役。")
     elif p['injury_weeks'] > 0:
         st.error(f"🚑 受傷休養中（剩餘 {p['injury_weeks']} 週）")
-        if st.button("⏩ 跳過休養週"):
+        if st.button("⏩ 跳過休養週", key="skip_injury_week"):
             p['injury_weeks'] -= 1; next_week(); st.rerun()
     else:
         col_w1, col_w2 = st.columns([3, 1])
         col_w1.markdown(f"## 🗓️ 第 {p['season']} 賽季 - 第 {p['week']}/38 週")
-        if col_w2.button("⏩ 結束本週日程", type="secondary", use_container_width=True):
+        if col_w2.button("⏩ 結束本週日程", type="secondary", use_container_width=True, key="end_week_btn"):
             next_week(); st.rerun()
 
         if p.get('life_event_pending'):
@@ -760,13 +827,13 @@ with tab_home:
                 )
                 st.success(f"**{ev['title']}**\n\n{ev_desc}")
                 le1, le2 = st.columns(2)
-                if le1.button(ev['options'][0]['label'], use_container_width=True, key="life_event_opt_a"):
+                if le1.button(ev['options'][0]['label'], use_container_width=True, key=f"life_event_opt_a_{ev['id']}"):
                     msg = ev['options'][0]['apply'](p)
                     p['social_tweets'].insert(0, msg)
                     p['life_event_pending'] = None
                     check_achievements()
                     st.rerun()
-                if le2.button(ev['options'][1]['label'], use_container_width=True, key="life_event_opt_b"):
+                if le2.button(ev['options'][1]['label'], use_container_width=True, key=f"life_event_opt_b_{ev['id']}"):
                     msg = ev['options'][1]['apply'](p)
                     p['social_tweets'].insert(0, msg)
                     p['life_event_pending'] = None
@@ -777,7 +844,7 @@ with tab_home:
             c_info_now = ALL_COUNTRIES_DB[p['country']]
             st.success(f"🌍 國家隊召集！{c_info_now['national']} 教練組邀請你出席集訓同友誼賽！")
             cu1, cu2 = st.columns(2)
-            if cu1.button("✅ 接受召集(消耗1 AP,獲得聲望與獎金)", disabled=(p['ap'] < 1)):
+            if cu1.button("✅ 接受召集(消耗1 AP,獲得聲望與獎金)", disabled=(p['ap'] < 1), key="callup_accept"):
                 p['ap'] -= 1
                 p['caps'] += 1
                 p['money'] += 1000
@@ -787,7 +854,7 @@ with tab_home:
                 check_achievements()
                 if p['ap'] <= 0: next_week()
                 st.rerun()
-            if cu2.button("❌ 婉拒(專注球會賽事)"):
+            if cu2.button("❌ 婉拒(專注球會賽事)", key="callup_decline"):
                 p['call_up_pending'] = False
                 st.rerun()
 
@@ -798,7 +865,7 @@ with tab_home:
             else: st.error(f"❌ **【遺憾失誤】** {res['detail']}")
             st.markdown(f"#### 🏟️ 全場賽果：{p['club']} {res['team_score'][0]} - {res['team_score'][1]} {res['opponent']}")
             st.info(f"📈 賽後影響：教練信任度 {res['trust_change']} | 疲勞度 +{res['fatigue_add']}%")
-            if st.button("確定並返回日程 ->", type="primary"):
+            if st.button("確定並返回日程 ->", type="primary", key="match_result_confirm"):
                 p['match_result'] = None
                 check_achievements()
                 if p['ap'] <= 0: next_week()
@@ -839,25 +906,25 @@ with tab_home:
 
             if "門將" in p['position']:
                 st.caption(f"💡 撲救成功率約 {success_rate(p['stamina'])}%（受體能與默契影響）")
-                if st.button("🧤 飛身極限撲救", use_container_width=True): choice = "save"
-                if st.button("🚪 果斷出擊封堵角度", use_container_width=True): choice = "save"
-                if st.button("🗣️ 指揮後線卡位", use_container_width=True): choice = "pass"
+                if st.button("🧤 飛身極限撲救", use_container_width=True, key="gk_save1"): choice = "save"
+                if st.button("🚪 果斷出擊封堵角度", use_container_width=True, key="gk_save2"): choice = "save"
+                if st.button("🗣️ 指揮後線卡位", use_container_width=True, key="gk_pass1"): choice = "pass"
             else:
                 if evt['type'] == "penalty":
                     st.caption(f"💡 射門成功率約 {success_rate(p['shooting'])}%（受射門與默契影響）")
-                    if st.button("🎯 大力抽射球門左上死角", use_container_width=True): choice = "shoot"
-                    if st.button("👟 冷靜推射右下角", use_container_width=True): choice = "shoot"
-                    if st.button("💥 踢勺子踢法 (Panenka)", use_container_width=True): choice = "shoot"
+                    if st.button("🎯 大力抽射球門左上死角", use_container_width=True, key="pen_shoot1"): choice = "shoot"
+                    if st.button("👟 冷靜推射右下角", use_container_width=True, key="pen_shoot2"): choice = "shoot"
+                    if st.button("💥 踢勺子踢法 (Panenka)", use_container_width=True, key="pen_shoot3"): choice = "shoot"
                 elif evt['type'] == "defend":
                     st.caption(f"💡 防守成功率約 {success_rate(p['defending'])}%（受防守與默契影響）")
-                    if st.button("🛡️ 頂身拼搶解圍", use_container_width=True): choice = "defend"
-                    if st.button("🧱 回撤補位協防", use_container_width=True): choice = "defend"
-                    if st.button("⚔️ 強硬正面攔截", use_container_width=True): choice = "defend"
+                    if st.button("🛡️ 頂身拼搶解圍", use_container_width=True, key="def_choice1"): choice = "defend"
+                    if st.button("🧱 回撤補位協防", use_container_width=True, key="def_choice2"): choice = "defend"
+                    if st.button("⚔️ 強硬正面攔截", use_container_width=True, key="def_choice3"): choice = "defend"
                 else:
                     st.caption(f"💡 成功率參考：射門 {success_rate(p['shooting'])}% ｜ 傳球 {success_rate(p['passing'])}% ｜ 盤帶 {success_rate(p['dribbling'])}%")
-                    if st.button("🚀 果斷起腳轟門", use_container_width=True): choice = "shoot"
-                    if st.button("👟 手術刀直塞分球", use_container_width=True): choice = "pass"
-                    if st.button("⚡ 強行盤帶連過一人", use_container_width=True): choice = "dribble"
+                    if st.button("🚀 果斷起腳轟門", use_container_width=True, key="atk_shoot"): choice = "shoot"
+                    if st.button("👟 手術刀直塞分球", use_container_width=True, key="atk_pass"): choice = "pass"
+                    if st.button("⚡ 強行盤帶連過一人", use_container_width=True, key="atk_dribble"): choice = "dribble"
 
             if choice:
                 if choice == "shoot": check_attr = p['shooting']
@@ -885,12 +952,11 @@ with tab_home:
                     trust_msg = f"+{trust_inc}%"
                     # 表現出色有機會直接喺比賽中成長,唔一定要靠特訓
                     if random.random() < 0.15:
-                        growable = [k for k in ["shooting", "passing", "dribbling", "stamina", "defending"] if p[k] < p['potential'][k]]
+                        growable = [k for k in STAT_KEYS if p[k] < p['potential'][k]]
                         if growable:
                             gk = random.choice(growable)
                             p[gk] = min(p['potential'][gk], p[gk] + 1)
-                            stat_name_map = {"shooting": "射門", "passing": "傳球", "dribbling": "盤帶", "stamina": "體能", "defending": "防守"}
-                            growth_msg = f" 呢場比賽嘅實戰經驗令你嘅{stat_name_map[gk]}略有進步！"
+                            growth_msg = f" 呢場比賽嘅實戰經驗令你嘅{STAT_NAME_MAP[gk]}略有進步！"
                 else:
                     if choice == "defend":
                         detail = "回防步伐慢半拍，被對方輕鬆突破防線。"
@@ -946,7 +1012,7 @@ with tab_home:
                     st.caption(f"身份：{role_status}")
                     selection_chance = 88 if p_role == "starter" else 55
                     st.caption(f"💡 正選成員都唔一定必然上陣，本場獲派正式出場機率約 {selection_chance}%（教練會輪換陣容）")
-                    if st.button("🔥 出戰本週賽事", type="primary", use_container_width=True, disabled=(p['ap'] < 1)):
+                    if st.button("🔥 出戰本週賽事", type="primary", use_container_width=True, disabled=(p['ap'] < 1), key="play_match_btn"):
                         p['ap'] -= 1
                         if random.randint(1, 100) <= selection_chance:
                             p['matches'] += 1
@@ -973,12 +1039,12 @@ with tab_home:
                     t_map = {"🛡️ 防守站位訓練": "defending", "🎯 射門/搶截訓練": "shooting", "🅰️ 傳球組織": "passing", "⚡ 盤帶速度": "dribbling", "💪 體能加強": "stamina"}
                 else:
                     t_map = {"🎯 射門/搶斷": "shooting", "🅰️ 傳球組織": "passing", "⚡ 盤帶速度": "dribbling", "💪 體能加強": "stamina"}
-                t_choice = st.selectbox("訓練項目", list(t_map.keys()))
+                t_choice = st.selectbox("訓練項目", list(t_map.keys()), key="train_select")
                 stat_key = t_map[t_choice]
                 gap = p['potential'][stat_key] - p[stat_key]
                 train_chance = max(15, min(90, 30 + gap * 3))
                 st.caption(f"💡 今次特訓進步機率約 {train_chance}%（越接近潛力上限，進步越難）")
-                if st.button("💪 開始特訓", use_container_width=True, disabled=(p['ap'] < 1)):
+                if st.button("💪 開始特訓", use_container_width=True, disabled=(p['ap'] < 1), key="train_btn"):
                     p['ap'] -= 1; p['fatigue'] = min(100, p['fatigue'] + 15)
                     overtrain_injury = p['fatigue'] >= 85 and random.random() < 0.12
                     if overtrain_injury:
@@ -997,7 +1063,7 @@ with tab_home:
             with c3:
                 st.subheader("🍻 休息室社交")
                 st.caption("消耗 1 AP | 默契+10")
-                if st.button("🤝 建立關係", use_container_width=True, disabled=(p['ap'] < 1)):
+                if st.button("🤝 建立關係", use_container_width=True, disabled=(p['ap'] < 1), key="socialize_btn"):
                     p['ap'] -= 1; p['chemistry'] = min(100, p['chemistry'] + 10)
                     st.success("隊友默契度提升！")
                     if p['ap'] <= 0: next_week()
@@ -1006,7 +1072,7 @@ with tab_home:
             with c4:
                 st.subheader("🛌 理療休養")
                 st.caption("消耗 1 AP | 疲勞 -35%")
-                if st.button("☕ 充分休息", use_container_width=True, disabled=(p['ap'] < 1)):
+                if st.button("☕ 充分休息", use_container_width=True, disabled=(p['ap'] < 1), key="rest_btn"):
                     p['ap'] -= 1; p['fatigue'] = max(0, p['fatigue'] - 35)
                     st.success("疲勞度大幅降低！")
                     if p['ap'] <= 0: next_week()
@@ -1068,14 +1134,20 @@ with tab_market:
     with col_m1:
         st.markdown("#### 🔄 外借租借 (Loan Out)")
         if p_role != "starter" and not p['is_loaned']:
-            if st.button("📢 申請外借至乙組球會"):
+            loan_locked = p.get('loan_cooldown', 0) > 0
+            if loan_locked:
+                st.caption(f"⏳ 外借申請冷卻中，仲有 {p['loan_cooldown']} 週先可以再申請。")
+            if st.button("📢 申請外借至乙組球會 (消耗1 AP)", disabled=(loan_locked or p['ap'] < 1), key="loan_out_btn"):
+                p['ap'] -= 1
                 p['parent_club'] = p['club']
                 p['club'] = f"{p['country']} 乙組球會 (租借)"
                 p['is_loaned'] = True; p['coach_trust'] = 85
+                p['loan_cooldown'] = 4
                 if p['club'] not in p['league_table']:
                     p['league_table'][p['club']] = {"points": 0, "played": 0, "gf": 0, "ga": 0}
                 p['social_tweets'].insert(0, f"官宣！{p['name']} 已被外借尋求正選機會！")
                 check_achievements()
+                if p['ap'] <= 0: next_week()
                 st.rerun()
         elif p['is_loaned']:
             st.info(f"你目前正外借效力中 (母會：{p['parent_club']})")
@@ -1112,13 +1184,13 @@ with tab_market:
     if p.get('contract_expired'):
         st.warning("⚠️ 你嘅合約已經到期！請選擇續約或者轉投其他球會。")
         cw1, cw2 = st.columns(2)
-        if cw1.button("✍️ 續約 (加薪)"):
+        if cw1.button("✍️ 續約 (加薪)", key="renew_contract_btn"):
             p['wage'] = int(p['wage'] * random.uniform(1.05, 1.15))
             p['contract_years_left'] = random.randint(2, 4)
             p['contract_expired'] = False
             p['social_tweets'].insert(0, f"📝 你同 {p['club']} 完成續約，週薪加至 ${p['wage']:,}。")
             st.rerun()
-        if cw2.button("🚪 唔續約，尋找新東家"):
+        if cw2.button("🚪 唔續約，尋找新東家", key="leave_contract_btn"):
             candidates = [c for c in p.get('rivals', []) if c != p['club']]
             if candidates:
                 new_club = random.choice(candidates)
@@ -1140,7 +1212,7 @@ with tab_market:
         offer = p['transfer_offer_pending']
         st.info(f"📩 收到轉會邀約：**{offer['club']}**，週薪 **${offer['wage']:,}**")
         to1, to2 = st.columns(2)
-        if to1.button("✅ 接受邀約"):
+        if to1.button("✅ 接受邀約", key="accept_offer_btn"):
             p['club'] = offer['club']; p['wage'] = offer['wage']
             p['coach_trust'] = 50; p['contract_years_left'] = random.randint(2, 4); p['contract_expired'] = False
             if p['club'] not in p['league_table']:
@@ -1148,20 +1220,27 @@ with tab_market:
             p['social_tweets'].insert(0, f"🔁 你轉投 {p['club']}！")
             p['transfer_offer_pending'] = None
             st.rerun()
-        if to2.button("❌ 拒絕邀約"):
+        if to2.button("❌ 拒絕邀約", key="reject_offer_btn"):
             p['transfer_offer_pending'] = None
             st.rerun()
     elif not p['is_loaned']:
-        st.caption("可以主動接觸同級球會，睇下有冇更好嘅條件。")
-        if st.button("🔎 尋找轉會邀約"):
+        transfer_locked = p.get('transfer_cooldown', 0) > 0
+        if transfer_locked:
+            st.caption(f"⏳ 轉會市場探訪冷卻中，仲有 {p['transfer_cooldown']} 週先可以再搵。")
+        else:
+            st.caption("可以主動接觸同級球會，睇下有冇更好嘅條件。消耗 1 AP，之後 3 週內唔可以再搵。")
+        if st.button("🔎 尋找轉會邀約 (消耗1 AP)", disabled=(transfer_locked or p['ap'] < 1), key="find_offer_btn"):
+            p['ap'] -= 1
+            p['transfer_cooldown'] = 3
             candidates = [c for c in p.get('rivals', []) if c != p['club']]
             if candidates:
                 offer_club = random.choice(candidates)
                 offer_wage = max(300, int(p['wage'] * random.uniform(0.85, 1.3)))
                 p['transfer_offer_pending'] = {"club": offer_club, "wage": offer_wage}
-                st.rerun()
             else:
                 st.caption("暫時冇搵到合適嘅邀約。")
+            if p['ap'] <= 0: next_week()
+            st.rerun()
     else:
         st.caption("外借期間暫時唔可以進行同級轉會。")
 
@@ -1190,7 +1269,7 @@ with tab_career:
     st.divider()
     if p['age'] >= 30:
         st.warning("你已經踏入生涯後段,可以考慮光榮退役,將戰績永久留存喺名人堂。")
-        if st.button("🏁 宣布退役", type="primary"):
+        if st.button("🏁 宣布退役", type="primary", key="retire_btn"):
             st.session_state.hall_of_fame.append({
                 "name": p['name'], "goals": p['goals'], "assists": p['assists'],
                 "saves": p['saves'], "matches": p['matches'], "final_club": p['club'],
