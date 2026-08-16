@@ -2,7 +2,7 @@ import streamlit as st
 import random
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="綠茵傳奇 Pro - 全位置版", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="綠茵傳奇 Pro - 龍門專屬版", page_icon="⚽", layout="wide")
 
 # --- 1. 創角系統 (涵蓋所有球場位置) ---
 if "created" not in st.session_state:
@@ -27,7 +27,7 @@ if not st.session_state.created:
     
     with col_c2:
         st.info(f"💡 **{position}** 屬性偏重與職責：\n"
-                "- 門將/後衛看重 **防守/體能**，專注於 **零封 (Clean Sheet) 與搶斷/撲救**。\n"
+                "- 門將/後衛看重 **防守/體能與門將專項**，專注於 **零封 (Clean Sheet) 與撲救/攔截**。\n"
                 "- 中場看重 **傳球/盤帶**，專注於 **掌控節奏與助攻**。\n"
                 "- 前鋒看重 **射門/速度**，專注於 **進球得分**。")
 
@@ -49,10 +49,10 @@ if not st.session_state.created:
             "club": "橫濱水手",
             "wage": 1500,
             "money": 5000,
-            "shooting": sh,
-            "passing": pa,
-            "dribbling": dr,
-            "stamina": st_attr,
+            "shooting": sh,     # 門將：代表射門/解圍大腳
+            "passing": pa,      # 門將：代表手拋球發動反擊 / 長傳發球
+            "dribbling": dr,    # 門將：代表反應與出擊果斷度
+            "stamina": st_attr, # 門將：代表極限撲救能力與門將體能
             "ap": 3,
             "max_ap": 3,
             "fatigue": 0,
@@ -64,8 +64,8 @@ if not st.session_state.created:
             "matches": 0,
             "goals": 0,
             "assists": 0,
-            "cleansheets": 0, # 防守球員/門將專用數據
-            "saves": 0,       # 門將專用數據
+            "cleansheets": 0,
+            "saves": 0,
             "trophies": [],
             "completed_milestones": [],
             "season": 1,
@@ -73,8 +73,8 @@ if not st.session_state.created:
             "rival_goals": 10,
             "event_msg": None,
             "social_tweets": [
-                f"球迷: 新星 {name} ({position}) 正式簽約加盟！",
-                "媒體: 期待這位小將本賽季的表現。"
+                f"球迷: 新星門將 {name} ({position}) 正式簽約加盟！",
+                "媒體: 期待這位守門員本賽季的撲救表現。"
             ],
             "match_in_progress": False,
             "match_result": None
@@ -113,9 +113,12 @@ st.sidebar.title("⚽ 綠茵傳奇 Pro")
 st.sidebar.markdown(f"### 👤 **{p['name']}** (OVR: **{ovr}**)")
 st.sidebar.caption(f"位置：**{p['position']}** | 效力：**{p['club']}**")
 
+# 雷達圖標籤根據位置動態顯示
+radar_labels = ['射門/長傳解圍', '傳球發動', '反應出擊', '極限撲救/體能'] if "門將" in p['position'] else ['射門', '傳球', '盤帶', '體能/防守']
+
 fig = go.Figure(data=go.Scatterpolar(
   r=[p['shooting'], p['passing'], p['dribbling'], p['stamina']],
-  theta=['射門', '傳球', '盤帶', '體能/防守'],
+  theta=radar_labels,
   fill='toself', line_color='#00CC96'
 ))
 fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[30, 100])), showlegend=False, margin=dict(l=20, r=20, t=20, b=20), height=170)
@@ -155,8 +158,8 @@ def next_week():
     
     if random.random() < 0.15 and p['injury_weeks'] == 0:
         events = [
-            ("隊友深夜派對邀請！去放鬆還是自主訓練？", "party"),
-            ("媒體發起爭議採訪，問你對教練戰術的看法。", "media")
+            ("隊友深夜派對邀請！去放鬆還是自主特訓？", "party"),
+            ("媒體發起爭議採訪，問你對門將/戰術安排的看法。", "media")
         ]
         p['event_msg'] = random.choice(events)
 
@@ -164,11 +167,14 @@ def next_week():
         st.balloons()
         st.subheader("🏆 賽季結算典禮")
         st.write(f"第 {p['season']} 賽季正式結束！")
-        st.write(f"📊 本季數據：進球 **{p['goals']}** | 助攻 **{p['assists']}** | 零封場次 **{p['cleansheets']}**")
+        if "門將" in p['position']:
+            st.write(f"📊 本季門將數據：關鍵撲救 **{p['saves']}** | 零封場次 **{p['cleansheets']}**")
+        else:
+            st.write(f"📊 本季數據：進球 **{p['goals']}** | 助攻 **{p['assists']}** | 零封場次 **{p['cleansheets']}**")
         
-        if p['goals'] >= p['rival_goals']:
-            st.success("🥇 恭喜獲得個人賽季最佳獎項！")
-            p['trophies'].append(f"第 {p['season']} 賽季最佳球員")
+        if p['cleansheets'] >= 10 or p['goals'] >= p['rival_goals']:
+            st.success("🥇 恭喜獲得個人賽季最佳獎項（金手套獎/最佳球員）！")
+            p['trophies'].append(f"第 {p['season']} 賽季最佳門將/球員")
 
         p['season'] += 1; p['week'] = 1; p['age'] += 1
 
@@ -203,9 +209,9 @@ else:
         res = p['match_result']
         st.markdown("### 📊 本場比賽戰報")
         if res['success']:
-            st.balloons(); st.success(f"🎉 **【關鍵決策成功！】** {res['detail']}")
+            st.balloons(); st.success(f"🎉 **【關鍵處置成功！】** {res['detail']}")
         else:
-            st.error(f"❌ **【防守/進攻挫敗】** {res['detail']}")
+            st.error(f"❌ **【門將/戰術失誤】** {res['detail']}")
             
         st.info(f"📈 賽後影響：教練信任 {res['trust_change']} | 疲勞度 +25%")
         
@@ -214,20 +220,20 @@ else:
             if p['ap'] <= 0: next_week()
             st.rerun()
 
-    # B. 進行比賽關鍵決策 (根據 6 大位置提供專屬選項)
+    # B. 進行比賽關鍵決策
     elif p['match_in_progress']:
         st.subheader(f"📡 比賽現場關鍵時刻 ({p['position']})")
-        st.write(f"⏱️ **85' 分鐘**：比賽進入最後關鍵時刻！身為 **{p['position']}** 的你面臨考驗：")
+        st.write(f"⏱️ **85' 分鐘**：對手發動絕殺進攻！身為 **{p['position']}** 的你面臨門前考驗：")
         
         c_m1, c_m2, c_m3 = st.columns(3)
         choice = None
         
         if "門將" in p['position']:
-            if c_m1.button("🧤 飛身極限撲救 (考驗體能/反應)"): choice = "defend"
-            if c_m2.button("🚪 果斷出擊封堵近角"): choice = "defend"
-            if c_m3.button("🎯 長傳發動快速反擊"): choice = "pass"
+            if c_m1.button("🧤 飛身極限撲救 (考驗撲救能力)"): choice = "save"
+            if c_m2.button("🚪 果斷出擊封堵單刀"): choice = "reaction"
+            if c_m3.button("🎯 長傳/手拋球快速反擊"): choice = "pass"
         elif "中堅" in p['position']:
-            if c_m1.button("💥 關鍵滑鏟攔截 (考驗防守)"): choice = "defend"
+            if c_m1.button("💥 關鍵滑鏟攔截"): choice = "defend"
             if c_m2.button("🗣️ 指揮防線並高空解圍"): choice = "defend"
             if c_m3.button("👟 冷靜後場組織傳球"): choice = "pass"
         elif "邊後衛" in p['position']:
@@ -249,20 +255,30 @@ else:
 
         if choice:
             bonus = (10 if p['form'] == "火熱" else ( -10 if p['form'] == "低迷" else 0)) + int(p['chemistry'] / 10)
-            success, m_g, m_a, m_cs, detail_msg = False, 0, 0, 0, ""
+            success, m_g, m_a, m_cs, m_saves, detail_msg = False, 0, 0, 0, 0, ""
             
-            check_attr = p['stamina'] if choice == "defend" else (p['shooting'] if choice == "shoot" else (p['passing'] if choice == "pass" else p['dribbling']))
+            if choice == "save": check_attr = p['stamina']
+            elif choice == "reaction": check_attr = p['dribbling']
+            elif choice == "defend": check_attr = p['stamina']
+            elif choice == "shoot": check_attr = p['shooting']
+            elif choice == "pass": check_attr = p['passing']
+            else: check_attr = p['dribbling']
             
             if (random.randint(1, 100) + bonus) < check_attr:
                 success = True
-                if choice == "shoot": m_g = 1; detail_msg = "完美的起腳，皮球應聲入網！進球！"
+                if choice == "save": 
+                    m_cs = 1; m_saves = 1; detail_msg = "神級反應！你縱身一躍將皮球托出橫樑，成功守住球門零封對手！"
+                elif choice == "reaction": 
+                    m_cs = 1; m_saves = 1; detail_msg = "果斷出擊！你在對方前鋒起腳前精準將球破壞！"
+                elif choice == "pass" and "門將" in p['position']: 
+                    m_a = 1; detail_msg = "發動神級手拋球快攻，精準找到前場前鋒直接助攻破門！"
+                elif choice == "shoot": m_g = 1; detail_msg = "完美的起腳，皮球應聲入網！進球！"
                 elif choice == "pass": m_a = 1; detail_msg = "精準的傳球徹底撕開對手防線！助攻成功！"
-                elif choice == "defend": m_cs = 1; detail_msg = "神級防守！你成功化解了對手的必進球，力保球門不失！"
-                else: m_g = 1; detail_msg = "漂亮的突破後冷靜推射得手！"
+                else: m_cs = 1; detail_msg = "關鍵防守成功化解危機！"
             else:
-                detail_msg = "關鍵處置被對手識破，沒能達到預期效果。"
+                detail_msg = "處置被對手識破，不幸被對方攻破球門/失誤。"
 
-            p['goals'] += m_g; p['assists'] += m_a; p['cleansheets'] += m_cs
+            p['goals'] += m_g; p['assists'] += m_a; p['cleansheets'] += m_cs; p['saves'] += m_saves
             p['fatigue'] = min(100, p['fatigue'] + 25)
             
             if success:
@@ -292,14 +308,32 @@ else:
         with c2:
             st.subheader("🏋️ 針對性特訓")
             st.caption("消耗 1 AP | 疲勞 +15%")
-            t_choice = st.selectbox("特訓項目", ["🎯 射門", "🅰️ 傳球", "⚡ 盤帶", "💪 防守/體能"])
+            
+            # --- 動態選單：根據位置提供專屬訓練 ---
+            if "門將" in p['position']:
+                t_options = ["🧤 飛身撲救與近角封堵", "⚡ 門前反應與出擊", "🎯 長傳與手拋球發球", "💥 門將體能與高空球解圍"]
+            elif "中堅" in p['position'] or "邊後衛" in p['position'] or "防守中場" in p['position']:
+                t_options = ["🛡️ 搶斷與斷球卡位", "🅰️ 後場組織長傳", "⚡ 邊路/中場速度", "💪 身體對抗與高空爭頂"]
+            else:
+                t_options = ["🎯 門前射門技巧", "🅰️ 手術刀傳球", "⚡ 盤帶與突破", "💪 體能與衝刺速度"]
+                
+            t_choice = st.selectbox("訓練項目", t_options)
+            
             if st.button("💪 開始特訓", use_container_width=True, disabled=(p['ap'] < 1)):
                 p['ap'] -= 1; p['fatigue'] = min(100, p['fatigue'] + 15)
-                if "射門" in t_choice: p['shooting'] += 1
-                elif "傳球" in t_choice: p['passing'] += 1
-                elif "盤帶" in t_choice: p['dribbling'] += 1
-                elif "防守" in t_choice: p['stamina'] += 1
-                st.success("能力提升！")
+                
+                if "門將" in p['position']:
+                    if "飛身撲救" in t_choice: p['stamina'] += 1
+                    elif "門前反應" in t_choice: p['dribbling'] += 1
+                    elif "長傳" in t_choice: p['passing'] += 1
+                    elif "門將體能" in t_choice: p['shooting'] += 1
+                else:
+                    if "射門" in t_choice or "搶斷" in t_choice: p['shooting'] += 1
+                    elif "傳球" in t_choice or "長傳" in t_choice: p['passing'] += 1
+                    elif "盤帶" in t_choice or "速度" in t_choice: p['dribbling'] += 1
+                    elif "體能" in t_choice or "身體對抗" in t_choice: p['stamina'] += 1
+                    
+                st.success("專屬特訓完成，能力獲得提升！")
                 if p['ap'] <= 0: next_week()
                 st.rerun()
 
