@@ -229,7 +229,7 @@ if not st.session_state.created:
                     "saves": 15 if "門將" in position else 0,
                 },
                 "caps": 0, "call_up_pending": False, "retired": False,
-                "potential": potential,
+                "potential": potential, "bench_result": None,
             }
             st.session_state.created = True
             st.rerun()
@@ -336,6 +336,7 @@ status_c6.metric("🧢 信任度", f"{p['coach_trust']}%")
 st.caption(f"**{p['name']}** | {p['position']} | {p['club']} | {p['age']}歲 | 🌍 {p['caps']} 次國際賽出場")
 
 with st.expander("📋 查看能力數值"):
+    st.caption("ℹ️ 每項屬性喺生涯開始時已隨機決定咗一個隱藏「潛力上限」（初始值 +10~30，上限99）。距離上限越遠，特訓/比賽進步機率越高；越接近上限，進步越困難。")
     pot = p['potential']
     stat_labels = [("射門", "shooting"), ("傳球", "passing"), ("盤帶", "dribbling"), ("體能", "stamina")]
     for label, key in stat_labels:
@@ -414,6 +415,16 @@ with tab_home:
             if st.button("確定並返回日程 ->", type="primary"):
                 p['match_result'] = None
                 check_achievements()
+                if p['ap'] <= 0: next_week()
+                st.rerun()
+
+        elif p.get('bench_result'):
+            bres = p['bench_result']
+            st.markdown("### 🪑 教練今場排陣")
+            st.warning(bres['message'])
+            st.caption(f"📈 影響：疲勞 +{bres['fatigue_add']}%（隨隊坐足全場）")
+            if st.button("確定並返回日程 ->", type="primary", key="bench_confirm"):
+                p['bench_result'] = None
                 if p['ap'] <= 0: next_week()
                 st.rerun()
 
@@ -527,16 +538,33 @@ with tab_home:
                     st.error("教練信任度過低，本週看台觀戰。請加強訓練！")
                 else:
                     st.caption(f"身份：{role_status}")
-                    if st.button("🔥 登場比賽", type="primary", use_container_width=True, disabled=(p['ap'] < 1)):
-                        p['ap'] -= 1; p['matches'] += 1
-                        p['match_role'] = p_role
-                        p['current_opponent'] = random.choice(p['rivals']) if p.get('rivals') else "對手球會"
-                        p['match_in_progress'] = True; st.rerun()
+                    selection_chance = 88 if p_role == "starter" else 55
+                    st.caption(f"💡 正選成員都唔一定必然上陣，本場獲派正式出場機率約 {selection_chance}%（教練會輪換陣容）")
+                    if st.button("🔥 出戰本週賽事", type="primary", use_container_width=True, disabled=(p['ap'] < 1)):
+                        p['ap'] -= 1
+                        if random.randint(1, 100) <= selection_chance:
+                            p['matches'] += 1
+                            p['match_role'] = p_role
+                            p['current_opponent'] = random.choice(p['rivals']) if p.get('rivals') else "對手球會"
+                            p['match_in_progress'] = True
+                        else:
+                            p['fatigue'] = min(100, p['fatigue'] + 5)
+                            bench_msgs = [
+                                f"{p['coach_name']}決定今場輪換陣容，你今仗屈居後備席，全程未有落場。",
+                                f"教練話想保留你嘅體能應付下一場硬仗，你今場冇被派上陣。",
+                                f"對方今仗派出強陣，{p['coach_name']}選擇更穩陣嘅陣容，你今場未有出場機會。",
+                            ]
+                            p['bench_result'] = {"message": random.choice(bench_msgs), "fatigue_add": 5}
+                        st.rerun()
 
             with c2:
                 st.subheader("🏋️ 隊內特訓")
                 st.caption("消耗 1 AP | 信任+2, 疲勞+15% | 效果視乎潛力與狀態浮動")
-                t_map = {"🎯 射門/搶斷": "shooting", "🅰️ 傳球組織": "passing", "⚡ 盤帶速度": "dribbling", "💪 體能加強": "stamina"}
+                is_gk = "門將" in p['position']
+                if is_gk:
+                    t_map = {"🧤 撲救反應訓練": "stamina", "🗣️ 防線指揮訓練": "passing", "🚪 出擊步法訓練": "dribbling"}
+                else:
+                    t_map = {"🎯 射門/搶斷": "shooting", "🅰️ 傳球組織": "passing", "⚡ 盤帶速度": "dribbling", "💪 體能加強": "stamina"}
                 t_choice = st.selectbox("訓練項目", list(t_map.keys()))
                 stat_key = t_map[t_choice]
                 gap = p['potential'][stat_key] - p[stat_key]
