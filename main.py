@@ -11,61 +11,117 @@ ALL_COUNTRIES_DB = {
         "league": "J2 乙組聯賽", "national": "日本國家隊",
         "clubs": [{"name": "橫濱FC", "wage": 800}, {"name": "清水心跳", "wage": 850}, {"name": "千葉市原", "wage": 800}],
         "rivals": ["磐田喜悅", "大宮松鼠", "水戶蜀葵", "町田澤維亞", "秋田拿薩", "山形蒙迪奧", "琉球FC", "藤枝MYFC", "今治FC"],
-        "top_club": {"name": "橫濱水手 (J1)", "req": 68, "wage": 3200}
+        "top_clubs": [
+            {"name": "鹿島鹿角 (Kashima Antlers)", "req": 63, "wage": 2600},
+            {"name": "浦和紅鑽 (Urawa Reds)", "req": 65, "wage": 2900},
+            {"name": "橫濱水手 (Yokohama F.Marinos)", "req": 68, "wage": 3200},
+            {"name": "川崎前鋒 (Kawasaki Frontale)", "req": 70, "wage": 3500},
+        ]
     },
     "🏴󠁧󠁢󠁥󠁮󠁧󠁿 英格蘭": {
         "league": "英冠 乙組聯賽", "national": "英格蘭國家隊",
         "clubs": [{"name": "新特蘭 (Sunderland)", "wage": 3000}, {"name": "列斯聯 (Leeds)", "wage": 3500}, {"name": "高雲地利 (Coventry)", "wage": 2800}],
         "rivals": ["諾定咸森林", "屈福特", "般尼茅夫", "史篤城", "米杜士堡", "赫爾城", "普茨茅夫", "白禮頓", "諾域治"],
-        "top_club": {"name": "阿仙奴 (Arsenal)", "req": 83, "wage": 85000}
+        "top_clubs": [
+            {"name": "熱刺 (Tottenham)", "req": 78, "wage": 65000},
+            {"name": "車路士 (Chelsea)", "req": 81, "wage": 82000},
+            {"name": "阿仙奴 (Arsenal)", "req": 83, "wage": 85000},
+            {"name": "利物浦 (Liverpool)", "req": 86, "wage": 120000},
+            {"name": "曼城 (Man City)", "req": 88, "wage": 130000},
+        ]
     },
     "🇪🇸 西班牙": {
         "league": "西乙 乙組聯賽", "national": "西班牙國家隊",
         "clubs": [{"name": "愛斯賓奴 (Espanyol)", "wage": 2500}, {"name": "薩拉戈薩 (Zaragoza)", "wage": 2000}, {"name": "希昂 (Sporting Gijon)", "wage": 2200}],
         "rivals": ["卡斯特雲", "阿爾梅利亞", "特內里費", "布爾戈斯", "洛哥迪斯", "卡塔赫納", "埃爾切", "拉斯帕爾馬斯", "米蘭迪斯"],
-        "top_club": {"name": "皇家馬德里 (Real Madrid)", "req": 86, "wage": 120000}
+        "top_clubs": [
+            {"name": "皇家貝迪斯 (Real Betis)", "req": 74, "wage": 30000},
+            {"name": "華倫西亞 (Valencia)", "req": 76, "wage": 35000},
+            {"name": "馬德里體育會 (Atletico Madrid)", "req": 83, "wage": 95000},
+            {"name": "巴塞隆拿 (Barcelona)", "req": 87, "wage": 125000},
+            {"name": "皇家馬德里 (Real Madrid)", "req": 86, "wage": 120000},
+        ]
     },
     "🇵🇹 葡萄牙": {
         "league": "葡甲 乙組聯賽", "national": "葡萄牙國家隊",
         "clubs": [{"name": "馬里迪莫 (Maritimo)", "wage": 1200}, {"name": "費利拿 (Pacos)", "wage": 1100}],
         "rivals": ["法馬利卡奧", "納舍爾", "特里連斯", "彭納菲爾", "維塞拉", "菲蓋拉斯", "毛拉", "希科塔", "奧利韋倫斯"],
-        "top_club": {"name": "葡萄牙體育 (Sporting CP)", "req": 74, "wage": 18000}
+        "top_clubs": [
+            {"name": "布拉加 (Braga)", "req": 68, "wage": 9000},
+            {"name": "波爾圖 (FC Porto)", "req": 73, "wage": 17000},
+            {"name": "葡萄牙體育 (Sporting CP)", "req": 74, "wage": 18000},
+            {"name": "賓菲加 (Benfica)", "req": 75, "wage": 20000},
+        ]
     },
     "🇮🇹 義大利": {
         "league": "意乙 乙組聯賽", "national": "意大利國家隊",
         "clubs": [{"name": "帕爾馬 (Parma)", "wage": 2200}, {"name": "桑普多利亞 (Sampdoria)", "wage": 2400}],
         "rivals": ["卡塔尼亞", "巴里", "科莫", "皮薩", "科森查", "斯佩齊亞", "布雷西亞", "薩勒尼塔納", "塔蘭托"],
-        "top_club": {"name": "國際米蘭 (Inter)", "req": 82, "wage": 80000}
+        "top_clubs": [
+            {"name": "羅馬 (AS Roma)", "req": 76, "wage": 55000},
+            {"name": "拿玻里 (Napoli)", "req": 80, "wage": 72000},
+            {"name": "AC米蘭 (AC Milan)", "req": 81, "wage": 78000},
+            {"name": "國際米蘭 (Inter)", "req": 82, "wage": 80000},
+            {"name": "祖雲達斯 (Juventus)", "req": 83, "wage": 85000},
+        ]
     },
     "🇩🇪 德國": {
         "league": "德乙 乙組聯賽", "national": "德國國家隊",
         "clubs": [{"name": "漢堡 (HSV)", "wage": 2800}, {"name": "史浩克04 (Schalke 04)", "wage": 3000}],
         "rivals": ["雲達不來梅", "紐倫堡", "杜塞爾多夫", "凱澤斯勞滕", "馬格德堡", "埃爾祖爾", "普勞恩", "希望之星", "波鴻"],
-        "top_club": {"name": "拜仁慕尼黑 (Bayern)", "req": 85, "wage": 105000}
+        "top_clubs": [
+            {"name": "禾夫斯堡 (Wolfsburg)", "req": 70, "wage": 40000},
+            {"name": "萊比錫 (RB Leipzig)", "req": 78, "wage": 65000},
+            {"name": "多蒙特 (Dortmund)", "req": 80, "wage": 70000},
+            {"name": "拜仁慕尼黑 (Bayern)", "req": 85, "wage": 105000},
+        ]
     },
     "🇫🇷 法國": {
         "league": "法乙 乙組聯賽", "national": "法國國家隊",
         "clubs": [{"name": "波爾多 (Bordeaux)", "wage": 2000}, {"name": "聖伊天 (Saint-Etienne)", "wage": 2100}],
         "rivals": ["蒙彼利埃", "阿雅克肖", "格勒諾布爾", "拉瓦爾", "安錫", "格勒", "羅底斯", "凱恩", "馬提格"],
-        "top_club": {"name": "巴黎聖日耳門 (PSG)", "req": 85, "wage": 115000}
+        "top_clubs": [
+            {"name": "尼斯 (OGC Nice)", "req": 68, "wage": 25000},
+            {"name": "馬賽 (Marseille)", "req": 75, "wage": 40000},
+            {"name": "摩納哥 (Monaco)", "req": 76, "wage": 45000},
+            {"name": "里爾 (Lille)", "req": 74, "wage": 38000},
+            {"name": "巴黎聖日耳門 (PSG)", "req": 85, "wage": 115000},
+        ]
     },
     "🇳🇱 荷蘭": {
         "league": "荷乙 乙組聯賽", "national": "荷蘭國家隊",
         "clubs": [{"name": "威廉二世 (Willem II)", "wage": 1500}, {"name": "格羅寧根 (Groningen)", "wage": 1600}],
         "rivals": ["羅達JC", "登波士", "海爾蒙德", "泰爾斯達", "阿爾梅勒城", "多爾德雷赫特", "MVV馬斯特里赫特", "德托普", "VVV費諾"],
-        "top_club": {"name": "阿積士 (Ajax)", "req": 74, "wage": 18000}
+        "top_clubs": [
+            {"name": "AZ阿爾克馬爾 (AZ Alkmaar)", "req": 65, "wage": 8000},
+            {"name": "飛燕諾 (Feyenoord)", "req": 71, "wage": 15000},
+            {"name": "PSV燕豪芬 (PSV Eindhoven)", "req": 72, "wage": 16000},
+            {"name": "阿積士 (Ajax)", "req": 74, "wage": 18000},
+        ]
     },
     "🇦🇷 阿根廷": {
         "league": "阿乙 乙組聯賽", "national": "阿根廷國家隊",
         "clubs": [{"name": "高隆 (Colon)", "wage": 600}, {"name": "阿爾馬格羅 (Almagro)", "wage": 500}],
         "rivals": ["聖馬田", "查卡利達", "阿爾米蘭特布朗", "德弗羅", "阿爾瓦雷斯", "特姆佩利", "維克拉爾", "夸卡", "德芬索雷斯"],
-        "top_club": {"name": "博卡青年 (Boca Juniors)", "req": 72, "wage": 8000}
+        "top_clubs": [
+            {"name": "拉盤拿杜 (Racing Club)", "req": 62, "wage": 3500},
+            {"name": "獨立隊 (Independiente)", "req": 64, "wage": 3800},
+            {"name": "聖羅倫素 (San Lorenzo)", "req": 66, "wage": 4200},
+            {"name": "河床 (River Plate)", "req": 73, "wage": 8500},
+            {"name": "博卡青年 (Boca Juniors)", "req": 72, "wage": 8000},
+        ]
     },
     "🇧🇷 巴西": {
         "league": "巴乙 乙組聯賽", "national": "巴西國家隊",
         "clubs": [{"name": "塞阿拉 (Ceara)", "wage": 700}, {"name": "瓜拉尼 (Guarani)", "wage": 650}],
         "rivals": ["諾提哥", "維拉諾亞", "巴拉那體育", "CRB", "沙佩科恩斯", "維拉利爾BR", "亞馬遜體育", "巴拉伊巴", "戈亞斯青年"],
-        "top_club": {"name": "法林明高 (Flamengo)", "req": 73, "wage": 9000}
+        "top_clubs": [
+            {"name": "哥連泰斯 (Corinthians)", "req": 64, "wage": 4000},
+            {"name": "山度士 (Santos)", "req": 66, "wage": 4500},
+            {"name": "聖保羅 (Sao Paulo)", "req": 71, "wage": 8000},
+            {"name": "巴迪美拉斯 (Palmeiras)", "req": 74, "wage": 9500},
+            {"name": "法林明高 (Flamengo)", "req": 73, "wage": 9000},
+        ]
     }
 }
 
@@ -1029,19 +1085,26 @@ with tab_market:
     with col_m2:
         st.markdown("#### 🏆 豪門轉會邀約")
         c_info = ALL_COUNTRIES_DB.get(p['country'])
-        if c_info and ovr >= c_info['top_club']['req']:
-            top = c_info['top_club']
-            st.write(f"✨ **{top['name']}** 提出合約！週薪：**${top['wage']:,}**")
-            if st.button(f"✍️ 加盟 {top['name']}"):
-                p['club'] = top['name']; p['wage'] = top['wage']; p['is_loaned'] = False
-                p['coach_trust'] = 50; p['joined_top_club'] = True
-                if p['club'] not in p['league_table']:
-                    p['league_table'][p['club']] = {"points": 0, "played": 0, "gf": 0, "ga": 0}
-                p['social_tweets'].insert(0, f"重磅！{p['name']} 加盟豪門 {top['name']}！")
-                check_achievements()
-                st.rerun()
+        top_clubs = c_info.get('top_clubs', []) if c_info else []
+        eligible_tops = [tc for tc in top_clubs if ovr >= tc['req']]
+        if eligible_tops:
+            for tc in eligible_tops:
+                st.write(f"✨ **{tc['name']}** 提出合約！週薪：**${tc['wage']:,}**（需求 OVR {tc['req']}）")
+                if st.button(f"✍️ 加盟 {tc['name']}", key=f"join_top_{tc['name']}"):
+                    p['club'] = tc['name']; p['wage'] = tc['wage']; p['is_loaned'] = False
+                    p['coach_trust'] = 50; p['joined_top_club'] = True
+                    p['contract_years_left'] = random.randint(2, 4); p['contract_expired'] = False
+                    if p['club'] not in p['league_table']:
+                        p['league_table'][p['club']] = {"points": 0, "played": 0, "gf": 0, "ga": 0}
+                    p['social_tweets'].insert(0, f"重磅！{p['name']} 加盟豪門 {tc['name']}！")
+                    check_achievements()
+                    st.rerun()
         else:
-            st.caption("當前能力值 (OVR) 尚不足以吸引頂級豪門，請繼續努力！")
+            nearest = min(top_clubs, key=lambda tc: tc['req']) if top_clubs else None
+            if nearest:
+                st.caption(f"當前能力值 (OVR {ovr}) 尚不足以吸引頂級豪門，最接近嘅目標係 **{nearest['name']}**（需要 OVR {nearest['req']}），請繼續努力！")
+            else:
+                st.caption("當前能力值 (OVR) 尚不足以吸引頂級豪門，請繼續努力！")
 
     st.divider()
     st.markdown("#### 📄 合約狀況")
