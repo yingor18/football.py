@@ -36,7 +36,9 @@ if not st.session_state.created:
             "passing": pa,
             "dribbling": dr,
             "stamina": st_attr,
-            "energy": 100,
+            "ap": 3,            # 每週行動點數 (Action Points)
+            "max_ap": 3,
+            "fatigue": 0,       # 疲勞度 (0 - 100)
             "form": "平穩",
             "injury_weeks": 0,
             "coach_trust": 65,
@@ -45,7 +47,7 @@ if not st.session_state.created:
             "goals": 0,
             "assists": 0,
             "trophies": [],
-            "completed_milestones": [], # 已解鎖的里程碑
+            "completed_milestones": [],
             "season": 1,
             "week": 1,
             "has_trainer": False,
@@ -56,7 +58,7 @@ if not st.session_state.created:
                 "媒體: 期待這位小將本賽季的表現。"
             ],
             "match_in_progress": False,
-            "match_result": None # 儲存比賽結果報告
+            "match_result": None
         }
         st.session_state.created = True
         st.rerun()
@@ -71,7 +73,7 @@ def get_ovr(player):
 
 ovr = get_ovr(p)
 
-# 里程碑任務檢查函數
+# 里程碑任務檢查
 milestones = [
     {"id": "first_goal", "title": "⚽ 職業生涯首球", "desc": "攻入職業生涯的第一個進球", "check": lambda p: p['goals'] >= 1},
     {"id": "goal_10", "title": "🔥 箭頭人物", "desc": "累積攻入 10 個進球", "check": lambda p: p['goals'] >= 10},
@@ -102,10 +104,15 @@ st.sidebar.metric("💰 週薪", f"${p['wage']:,}")
 st.sidebar.metric("💵 存款", f"${p['money']:,}")
 st.sidebar.divider()
 
+# AP 與疲勞度顯示
+st.sidebar.markdown(f"⚡ **本週剩餘 AP：** {'⚡' * p['ap']}{'⚪' * (p['max_ap'] - p['ap'])}")
+st.sidebar.progress(p['fatigue'] / 100, text=f"😫 身體疲勞度：{p['fatigue']}%")
+
+if p['fatigue'] >= 80:
+    st.sidebar.warning("⚠️ 身體極度疲勞，受傷風險極高！")
+
 if p['injury_weeks'] > 0:
     st.sidebar.error(f"🚑 受傷休養中（剩餘 {p['injury_weeks']} 週）")
-else:
-    st.sidebar.progress(p['energy'] / 100, text=f"⚡ 體力：{p['energy']}/100")
 
 st.sidebar.info(f"🔥 當前狀態：**{p['form']}**")
 st.sidebar.progress(p['coach_trust'] / 100, text=f"🧢 教練信任：{p['coach_trust']}%")
@@ -121,19 +128,45 @@ c_tw2.info(f"💬 {p['social_tweets'][1] if len(p['social_tweets']) > 1 else ''}
 
 st.divider()
 
+# 進入下一週處理
+def next_week():
+    p['week'] += 1
+    p['ap'] = p['max_ap']
+    p['money'] += p['wage']
+    # 稍微自然恢復一點疲勞
+    p['fatigue'] = max(0, p['fatigue'] - 10)
+    
+    if p['week'] > 38:
+        st.balloons()
+        st.subheader("🏆 賽季結算典禮")
+        st.write(f"第 {p['season']} 賽季正式結束！")
+        st.write(f"你在本賽季一共攻入 **{p['goals']}** 球，送出 **{p['assists']}** 次助攻！")
+        
+        if p['goals'] >= p['rival_goals']:
+            st.success("🥇 恭喜獲得【聯賽金靴獎（神射手）】榮譽！")
+            p['trophies'].append(f"第 {p['season']} 賽季金靴獎")
+        
+        p['season'] += 1
+        p['week'] = 1
+        p['age'] += 1
+        p['rival_goals'] = random.randint(12, 20)
+
 # 受傷處理
 if p['injury_weeks'] > 0:
-    st.error(f"🚑 你正在受傷休養中，無法參加比賽！(還需休養 {p['injury_weeks']} 週)")
+    st.error(f"🚑 你正在受傷休養中，無法進行高強度活動！(還需休養 {p['injury_weeks']} 週)")
     if st.button("⏩ 跳過本週休養"):
         p['injury_weeks'] -= 1
-        p['week'] += 1
-        p['energy'] = min(100, p['energy'] + 30)
-        p['money'] += p['wage']
+        p['fatigue'] = max(0, p['fatigue'] - 30)
+        next_week()
         st.rerun()
 else:
-    st.markdown(f"## 🗓️ 第 {p['season']} 賽季 - 第 {p['week']}/38 週")
+    col_w1, col_w2 = st.columns([3, 1])
+    col_w1.markdown(f"## 🗓️ 第 {p['season']} 賽季 - 第 {p['week']}/38 週")
+    if col_w2.button("⏩ 結束本週日程", type="secondary", use_container_width=True):
+        next_week()
+        st.rerun()
 
-    # A. 顯示比賽結果報告 (關鍵選擇完成後)
+    # A. 顯示比賽結果報告
     if p['match_result']:
         res = p['match_result']
         st.markdown("### 📊 本場比賽戰報")
@@ -144,28 +177,13 @@ else:
         else:
             st.error(f"❌ **【進攻挫敗】** {res['detail']}")
             
-        st.info(f"📈 賽後數據影響：\n- 本場統計：**+{res['g']} 進球 | +{res['a']} 助攻**\n- 教練信任度：**{res['trust_change']}**\n- 當前狀態變更為：**{p['form']}**")
+        st.info(f"📈 賽後數據影響：\n- 本場統計：**+{res['g']} 進球 | +{res['a']} 助攻**\n- 教練信任度：**{res['trust_change']}**\n- 疲勞度增加：**+25%**")
         
-        if st.button("確定並結束本週日程 ➔", type="primary"):
+        if st.button("確定並回到日程選單 ➔", type="primary"):
             p['match_result'] = None
-            p['week'] += 1
-            
-            # 賽季結算 (第 38 週)
-            if p['week'] > 38:
-                st.balloons()
-                st.subheader("🏆 賽季結算典禮")
-                st.write(f"第 {p['season']} 賽季正式結束！")
-                st.write(f"你在本賽季一共攻入 **{p['goals']}** 球，送出 **{p['assists']}** 次助攻！")
-                
-                if p['goals'] >= p['rival_goals']:
-                    st.success("🥇 恭喜獲得【聯賽金靴獎（神射手）】榮譽！")
-                    p['trophies'].append(f"第 {p['season']} 賽季金靴獎")
-                
-                p['season'] += 1
-                p['week'] = 1
-                p['age'] += 1
-                p['rival_goals'] = random.randint(12, 20)
-                
+            if p['ap'] <= 0:
+                st.toast("💡 本週 AP 已用完，已自動為你推進至下一週！")
+                next_week()
             st.rerun()
 
     # B. 進行關鍵時刻比賽
@@ -210,6 +228,7 @@ else:
 
             p['goals'] += m_g
             p['assists'] += m_a
+            p['fatigue'] = min(100, p['fatigue'] + 25) # 比賽增加疲勞
             
             if success:
                 p['form'] = "火熱"
@@ -222,7 +241,6 @@ else:
                 trust_msg = "-3%"
 
             p['match_in_progress'] = False
-            # 存入比賽結果，等待玩家點擊確定
             p['match_result'] = {
                 "success": success,
                 "detail": detail_msg,
@@ -232,47 +250,56 @@ else:
             }
             st.rerun()
 
-    # C. 日程選單
+    # C. 日程選單 (消耗 AP)
     else:
+        if p['ap'] <= 0:
+            st.info("💡 本週行動點數 (AP) 已耗盡，請點擊上方【結束本週日程】推進到下一週。")
+        
         col_act1, col_act2, col_act3 = st.columns(3)
 
         with col_act1:
             st.subheader("🏟️ 進行聯賽")
-            if st.button("🔥 開賽 (消耗 20 體力)", type="primary", use_container_width=True):
-                if p['energy'] >= 20:
-                    p['energy'] -= (15 if p['has_trainer'] else 22)
-                    p['matches'] += 1
-                    p['money'] += p['wage']
-                    
-                    if random.random() < 0.3: p['rival_goals'] += 1
-                    p['match_in_progress'] = True
+            st.caption("消耗 1 AP | 疲勞 +25%")
+            if st.button("🔥 登場比賽", type="primary", use_container_width=True, disabled=(p['ap'] < 1)):
+                p['ap'] -= 1
+                p['matches'] += 1
+                
+                # 過勞受傷風險檢查
+                if p['fatigue'] >= 75 and random.random() < 0.4:
+                    p['injury_weeks'] = random.randint(2, 4)
+                    st.error("糟糕！由於過度疲勞，你在比賽中不幸拉傷肌肉！")
                     st.rerun()
-                else:
-                    st.error("體力不足！請先休養。")
+                
+                if random.random() < 0.3: p['rival_goals'] += 1
+                p['match_in_progress'] = True
+                st.rerun()
 
         with col_act2:
             st.subheader("🏋️ 針對性特訓")
+            st.caption("消耗 1 AP | 疲勞 +15%")
             t_choice = st.selectbox("特訓項目", ["🎯 射門", "🅰️ 傳球", "⚡ 盤帶", "💪 體能"])
-            if st.button("💪 開始特訓 (消耗 15 體力)", use_container_width=True):
-                if p['energy'] >= 15:
-                    p['energy'] -= 15
-                    if "射門" in t_choice: p['shooting'] += 1
-                    elif "傳球" in t_choice: p['passing'] += 1
-                    elif "盤帶" in t_choice: p['dribbling'] += 1
-                    elif "體能" in t_choice: p['stamina'] += 1
-                    st.success("能力提升成功！")
-                    st.rerun()
-                else: st.error("體力不足！")
+            if st.button("💪 開始特訓", use_container_width=True, disabled=(p['ap'] < 1)):
+                p['ap'] -= 1
+                p['fatigue'] = min(100, p['fatigue'] + 15)
+                if "射門" in t_choice: p['shooting'] += 1
+                elif "傳球" in t_choice: p['passing'] += 1
+                elif "盤帶" in t_choice: p['dribbling'] += 1
+                elif "體能" in t_choice: p['stamina'] += 1
+                st.success("能力提升成功！")
+                if p['ap'] <= 0:
+                    next_week()
+                st.rerun()
 
         with col_act3:
-            st.subheader("🛌 休養復原")
-            if st.button("☕ 休養一週 (體力 +50)", use_container_width=True):
-                p['energy'] = min(100, p['energy'] + 50)
+            st.subheader("🛌 理療按摩與休養")
+            st.caption("消耗 1 AP | 疲勞 -35%")
+            if st.button("☕ 充分休息", use_container_width=True, disabled=(p['ap'] < 1)):
+                p['ap'] -= 1
+                p['fatigue'] = max(0, p['fatigue'] - 35)
                 p['form'] = "平穩"
-                p['week'] += 1
-                p['money'] += p['wage']
-                if p['week'] > 38:
-                    p['season'] += 1; p['week'] = 1; p['age'] += 1
+                st.success("身體疲勞大幅降低！")
+                if p['ap'] <= 0:
+                    next_week()
                 st.rerun()
 
 st.divider()
