@@ -18,12 +18,12 @@ ALL_COUNTRIES_DB = {
     },
     "🇪🇸 西班牙": {
         "league": "西乙 乙組聯賽",
-        "clubs": [{"name": "愛斯賓奴 (Espanyol)", "wage": 2500}, {"name": "薩拉戈薩 (Zaragoza)", "wage": 2000}, {"name": "希昂 (Sporting Gijón)", "wage": 2200}],
+        "clubs": [{"name": "愛斯賓奴 (Espanyol)", "wage": 2500}, {"name": "薩拉戈薩 (Zaragoza)", "wage": 2000}, {"name": "希昂 (Sporting Gijon)", "wage": 2200}],
         "top_club": {"name": "皇家馬德里 (Real Madrid)", "req": 86, "wage": 120000}
     },
     "🇵🇹 葡萄牙": {
         "league": "葡甲 乙組聯賽",
-        "clubs": [{"name": "馬里迪莫 (Marítimo)", "wage": 1200}, {"name": "費利拿 (Paços)", "wage": 1100}],
+        "clubs": [{"name": "馬里迪莫 (Maritimo)", "wage": 1200}, {"name": "費利拿 (Pacos)", "wage": 1100}],
         "top_club": {"name": "葡萄牙體育 (Sporting CP)", "req": 74, "wage": 18000}
     },
     "🇮🇹 義大利": {
@@ -38,7 +38,7 @@ ALL_COUNTRIES_DB = {
     },
     "🇫🇷 法國": {
         "league": "法乙 乙組聯賽",
-        "clubs": [{"name": "波爾多 (Bordeaux)", "wage": 2000}, {"name": "聖伊天 (Saint-Étienne)", "wage": 2100}],
+        "clubs": [{"name": "波爾多 (Bordeaux)", "wage": 2000}, {"name": "聖伊天 (Saint-Etienne)", "wage": 2100}],
         "top_club": {"name": "巴黎聖日耳門 (PSG)", "req": 85, "wage": 115000}
     },
     "🇳🇱 荷蘭": {
@@ -48,12 +48,12 @@ ALL_COUNTRIES_DB = {
     },
     "🇦🇷 阿根廷": {
         "league": "阿乙 乙組聯賽",
-        "clubs": [{"name": "高隆 (Colón)", "wage": 600}, {"name": "阿爾馬格羅 (Almagro)", "wage": 500}],
+        "clubs": [{"name": "高隆 (Colon)", "wage": 600}, {"name": "阿爾馬格羅 (Almagro)", "wage": 500}],
         "top_club": {"name": "博卡青年 (Boca Juniors)", "req": 72, "wage": 8000}
     },
     "🇧🇷 巴西": {
         "league": "巴乙 乙組聯賽",
-        "clubs": [{"name": "塞阿拉 (Ceará)", "wage": 700}, {"name": "瓜拉尼 (Guarani)", "wage": 650}],
+        "clubs": [{"name": "塞阿拉 (Ceara)", "wage": 700}, {"name": "瓜拉尼 (Guarani)", "wage": 650}],
         "top_club": {"name": "法林明高 (Flamengo)", "req": 73, "wage": 9000}
     }
 }
@@ -65,7 +65,6 @@ if "created" not in st.session_state:
 if not st.session_state.created:
     st.title("⚽ 綠茵傳奇 Pro - 創角與生涯選拔")
     
-    # 隨機抽取 3 個國家供選擇
     if "random_3_countries" not in st.session_state:
         st.session_state.random_3_countries = random.sample(list(ALL_COUNTRIES_DB.keys()), 3)
 
@@ -203,7 +202,7 @@ else:
         else: st.error(f"❌ **【遺憾失誤】** {res['detail']}")
         
         st.info(f"📈 賽後影響：教練信任度 {res['trust_change']} | 疲勞度 +{res['fatigue_add']}%")
-        if st.button("確定並返回日程 ➔", type="primary"):
+        if st.button("確定並返回日程 ->", type="primary"):
             p['match_result'] = None
             if p['ap'] <= 0: next_week()
             st.rerun()
@@ -212,7 +211,6 @@ else:
     elif p['match_in_progress']:
         st.subheader(f"📡 比賽現場關鍵局勢 ({p['position']})")
         
-        # 隨機觸發比賽局勢
         if not p['match_event']:
             events_pool = [
                 {"time": "12'", "title": "⚡ 開局高位逼搶反擊", "desc": "對方後衛傳球失誤！你在禁區前沿攔截成功，出現絕佳進攻機會！", "type": "attack"},
