@@ -2,7 +2,7 @@ import streamlit as st
 import random
 import time
 
-st.set_page_config(page_title="足球生涯：綠茵傳奇", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="綠茵傳奇 Pro", page_icon="⚽", layout="wide")
 
 # 1. 初始化資料
 if "player" not in st.session_state:
@@ -17,16 +17,20 @@ if "player" not in st.session_state:
         "dribbling": 66,
         "stamina": 70,
         "energy": 100,
-        "coach_trust": 60,   # 教練信任度 (影響是否正選)
-        "fans_love": 50,     # 球迷喜愛度
+        "coach_trust": 65,   # 教練信任度
+        "fans_love": 50,     # 球迷支持度
         "matches": 0,
         "goals": 0,
         "assists": 0,
         "season": 1,
         "week": 1,
-        "points": 0,
-        "news": "【頭條】17歲新星 Ho Yin 正式簽約加盟球隊，本賽季備受期待！",
-        "logs": []
+        "points": 12,        # 球會積分
+        "last_match_result": "尚未開始賽季",
+        "social_tweets": [
+            "球迷A: 聽講青訓營有個叫 Ho Yin 嘅新人好有天份！",
+            "記者B: 橫濱水手今季能否保級，就睇新秀發揮了。"
+        ],
+        "logs": ["17 歲正式簽約，展開職業足球生涯！"]
     }
 
 p = st.session_state.player
@@ -34,211 +38,189 @@ p = st.session_state.player
 def get_ovr(player):
     return int(player['shooting'] * 0.35 + player['passing'] * 0.3 + player['dribbling'] * 0.25 + player['stamina'] * 0.1)
 
-# 側邊欄：球員卡
-st.sidebar.title("⚽ 綠茵傳奇")
-st.sidebar.markdown(f"### 👤 **{p['name']}** (OVR: {get_ovr(p)})")
-st.sidebar.caption(f"效力球會：{p['club']} | {p['age']} 歲")
+ovr = get_ovr(p)
+
+# --- 側邊欄：球員簡介與狀態 ---
+st.sidebar.title("⚽ 綠茵傳奇 Pro")
+st.sidebar.markdown(f"### 👤 **{p['name']}** (OVR: {ovr})")
+st.sidebar.caption(f"效力：**{p['club']}** | {p['age']} 歲")
 st.sidebar.divider()
 
-st.sidebar.markdown(f"💰 **週薪**：${p['wage']:,} | **存款**：${p['money']:,}")
+st.sidebar.metric("💰 週薪", f"${p['wage']:,}")
+st.sidebar.metric("💵 存款", f"${p['money']:,}")
+
+st.sidebar.divider()
 st.sidebar.progress(p['energy'] / 100, text=f"⚡ 體力：{p['energy']}/100")
-st.sidebar.progress(p['coach_trust'] / 100, text=f"🧢 教練信任度：{p['coach_trust']}%")
-st.sidebar.progress(p['fans_love'] / 100, text=f"❤️ 球迷支持度：{p['fans_love']}%")
+st.sidebar.progress(p['coach_trust'] / 100, text=f"🧢 教練信任：{p['coach_trust']}%")
+st.sidebar.progress(p['fans_love'] / 100, text=f"❤️ 球迷支持：{p['fans_love']}%")
 
 st.sidebar.divider()
 st.sidebar.caption(f"第 {p['season']} 賽季 | 第 {p['week']}/38 週")
 
-# 主介面
-st.title("⚽ 足球生涯模擬器：綠茵傳奇")
+# --- 主介面 ---
+st.title("⚽ 綠茵傳奇 - 職業球員主控台")
 
-# 顯示最新體育新聞
-st.info(f"📰 **最新體育報章**：{p['news']}")
+# 頂部：最新社交媒體動態 (X / Twitter)
+st.markdown("### 📱 社交媒體與球迷反應 (X / Twitter)")
+col_tw1, col_tw2 = st.columns(2)
+col_tw1.info(f"💬 {p['social_tweets'][0]}")
+col_tw2.info(f"💬 {p['social_tweets'][1]}")
 
-tab_match, tab_event, tab_train, tab_transfer, tab_career = st.tabs([
-    "🏟️ 本週賽事", 
-    "📰 突發事件 / 採訪", 
-    "🏋️ 每日訓練", 
-    "💼 經理人辦公室", 
-    "📜 生涯日誌"
-])
+st.divider()
 
-# --- TAB 1: 本週賽事 (故事化比賽過程) ---
-with tab_match:
-    st.header(f"第 {p['week']} 週：{p['club']} VS 勁敵球隊")
-    
-    # 檢查是否正選
+# 中部：本週核心操作區 (無須切換 Tab，全部單頁搞定)
+st.markdown(f"## 🗓️ 第 {p['week']} 週日程")
+
+col_act1, col_act2, col_act3 = st.columns(3)
+
+# 動作 1：進行比賽
+with col_act1:
+    st.subheader("🏟️ 進行本週聯賽")
+    st.write(f"對手：**聯賽勁敵**")
     if p['coach_trust'] < 40:
-        st.warning("⚠️ 由於你近期表現或態度問題，教練把你放在替補席上！")
-        is_starter = False
+        st.error("⚠️ 教練信任過低：本場只能後備上陣 (出場時間受限)")
     else:
-        st.success("👕 你被選入本場比賽正選陣容！")
-        is_starter = True
+        st.success("👕 狀態良好：正選上陣")
+        
+    if st.button("🔥 正式開賽 (消耗 20 體力)", type="primary", use_container_width=True):
+        if p['energy'] >= 20:
+            p['energy'] -= 20
+            p['matches'] += 1
+            p['money'] += p['wage']
+            
+            # 模擬比賽直播
+            st.markdown("---")
+            st.subheader("📡 現場比賽直播中...")
+            
+            # 比賽文字模擬
+            m_goals = 0
+            m_assists = 0
+            events = []
+            
+            # 上半場
+            if random.randint(1, 100) < p['shooting']:
+                m_goals += 1
+                events.append("⚽ 32' **GOAL！** 你在禁區外接應妙傳，一腳世界波打破僵局！")
+            else:
+                events.append("❌ 32' 你在禁區前起腳遠射，可惜球擦柱而出。")
+                
+            # 下半場
+            if random.randint(1, 100) < p['passing']:
+                m_assists += 1
+                events.append("🅰️ 75' **ASSIST！** 你送出一記手術刀直塞，隊友輕鬆推射破門！")
+            elif random.randint(1, 100) < p['dribbling']:
+                m_goals += 1
+                events.append("⚽ 88' **GOAL！** 你連過兩人後冷靜扣過門將，推射空門得手！")
+            else:
+                events.append("❌ 88' 你嘗試強行突破被對方後衛合力包抄破壞。")
+            
+            p['goals'] += m_goals
+            p['assists'] += m_assists
+            
+            # 生成賽後新聞同球迷 Tweets
+            if m_goals + m_assists >= 2:
+                p['coach_trust'] = min(100, p['coach_trust'] + 10)
+                p['fans_love'] = min(100, p['fans_love'] + 12)
+                p['points'] += 3
+                p['social_tweets'] = [
+                    f"球迷X: {p['name']} 簡直係神！單場 {m_goals}球{m_assists}助攻，天秀！",
+                    f"體育報: {p['name']} 支配全場，帶領球隊取得重要勝仗！"
+                ]
+            elif m_goals + m_assists == 1:
+                p['coach_trust'] = min(100, p['coach_trust'] + 5)
+                p['fans_love'] = min(100, p['fans_love'] + 5)
+                p['points'] += 3
+                p['social_tweets'] = [
+                    f"球迷Y: {p['name']} 表現唔錯，關鍵時刻靠得住！",
+                    f"體育報: 憑藉 {p['name']} 的關鍵發揮，球隊小勝對手。"
+                ]
+            else:
+                p['coach_trust'] = max(0, p['coach_trust'] - 5)
+                p['points'] += 1
+                p['social_tweets'] = [
+                    f"球迷Z: {p['name']} 今日沉寂咗，狀態麻麻喎...",
+                    f"媒體: 鋒線乏力，{p['name']} 全場未獲太多機會。"
+                ]
+            
+            p['week'] += 1
+            if p['week'] > 38:
+                p['season'] += 1
+                p['week'] = 1
+                p['age'] += 1
+                p['points'] = 0
+                st.balloons()
+            
+            st.rerun()
+        else:
+            st.error("體力不足！請先休息恢復。")
 
-    if p['energy'] < 30:
-        st.error("⚠️ 體力極度匱乏！本場比賽受傷風險極高。")
+# 動作 2：自主訓練
+with col_act2:
+    st.subheader("🏋️ 自主加練")
+    train_option = st.selectbox("選擇特訓項目", ["🎯 射門 (加強得分)", "🅰️ 傳球 (加強助攻)", "⚡ 盤帶 (加強突破)", "💪 體能 (提升體力上限)"])
+    
+    if st.button("💪 開始自主特訓 (消耗 15 體力)", use_container_width=True):
+        if p['energy'] >= 15:
+            p['energy'] -= 15
+            if "射門" in train_option: p['shooting'] += 1
+            elif "傳球" in train_option: p['passing'] += 1
+            elif "盤帶" in train_option: p['dribbling'] += 1
+            elif "體能" in train_option: p['stamina'] += 1
+            st.success("訓練完成，能力值升級！")
+            st.rerun()
+        else:
+            st.error("體力不足！")
 
-    st.divider()
-
-    if st.button("🏁 開始比賽", type="primary", use_container_width=True):
-        p['energy'] = max(10, p['energy'] - 20)
-        p['matches'] += 1
+# 動作 3：休息與恢復
+with col_act3:
+    st.subheader("🛌 理療休養")
+    st.write("進行水療與物理治療，快速恢復體力。")
+    if st.button("☕ 休養一週 (體力 +50)", use_container_width=True):
+        p['energy'] = min(100, p['energy'] + 50)
         p['week'] += 1
         p['money'] += p['wage']
-        
-        # 模擬關鍵時刻 (2 個比賽事件)
-        match_events = []
-        match_goals = 0
-        match_assists = 0
-        
-        # 事件 1：上半場
-        st.subheader("⏱️ 上半場 35 分鐘：關鍵進攻")
-        chance1 = random.choice(["shoot", "pass"])
-        if chance1 == "shoot":
-            if random.randint(1, 100) < p['shooting']:
-                match_goals += 1
-                match_events.append("⚽ 35' 你在禁區頂接應妙傳，一腳勁射破門！球進啦！")
-            else:
-                match_events.append("❌ 35' 你起腳遠射，可惜皮球擦柱而出！")
-        else:
-            if random.randint(1, 100) < p['passing']:
-                match_assists += 1
-                match_events.append("🅰️ 35' 你送出一記精準的手術刀直塞，隊友輕鬆推射破門！")
-            else:
-                match_events.append("❌ 35' 你嘗試穿透性傳球，被對方後衛斷下。")
-
-        # 事件 2：下半場
-        chance2 = random.choice(["dribble", "shoot"])
-        if chance2 == "dribble":
-            if random.randint(1, 100) < p['dribbling']:
-                match_goals += 1
-                match_events.append("⚽ 78' 你沿左路連續晃過兩名後衛，小角度抽射破門！太精彩了！")
-            else:
-                match_events.append("❌ 78' 你嘗試強行突破被對方雙人包抄把球破壞。")
-        else:
-            if random.randint(1, 100) < p['shooting']:
-                match_goals += 1
-                match_events.append("⚽ 88' 絕殺！你在角球混戰中頭槌破門！")
-            else:
-                match_events.append("❌ 88' 你在禁區內頭槌攻門，被門將神勇撲出！")
-
-        p['goals'] += match_goals
-        p['assists'] += match_assists
-
-        # 播報比賽過程
-        for ev in match_events:
-            st.write(ev)
-
-        # 比賽結算與新聞生成
-        if match_goals > 0 or match_assists > 0:
-            p['coach_trust'] = min(100, p['coach_trust'] + 8)
-            p['fans_love'] = min(100, p['fans_love'] + 10)
-            p['news'] = f"【賽後頭條】{p['name']} 展現球星價值！全場貢獻 {match_goals} 球 {match_assists} 助攻率隊取勝！"
-            st.success(f"🎉 比賽結束！你獲得了 {match_goals} 進球，{match_assists} 助攻！")
-        else:
-            p['coach_trust'] = max(0, p['coach_trust'] - 3)
-            p['news'] = f"【體育新聞】{p['club']} 鋒線乏力，{p['name']} 本場比賽表現平平未能建功。"
-            st.info("比賽結束，你本場比賽未有進球或助攻。")
-
-        # 賽季推進檢查
+        p['social_tweets'] = [
+            f"球迷: {p['name']} 本週獲准休假養精蓄銳。",
+            f"新聞: {p['club']} 安排核心球員進行輪休復原。"
+        ]
         if p['week'] > 38:
-            p['season'] += 1
-            p['week'] = 1
-            p['age'] += 1
-            st.balloons()
-            st.success("🏆 賽季結束！進入全新賽季！")
-        
+            p['season'] += 1; p['week'] = 1; p['age'] += 1; p['points'] = 0
         st.rerun()
 
-# --- TAB 2: 突發事件 / 賽後採訪 ---
-with tab_event:
-    st.header("📰 場外新聞與抉擇")
-    st.caption("作為一名職業球員，你在場外的言行舉止同樣影響著你的職業生涯。")
-    
-    st.subheader("🎙️ 記者會提問：")
-    st.write("記者：「對於近期隊中的競爭，以及教練的戰術安排，你有甚麼睇法？」")
-    
-    col_ans1, col_ans2, col_ans3 = st.columns(3)
-    if col_ans1.button("🗣️ 『服從教練安排，團隊利益高於一切。』"):
-        p['coach_trust'] = min(100, p['coach_trust'] + 10)
-        p['logs'].insert(0, f"第 {p['week']} 週：你在採訪中展現職業態度，教練信任度提升。")
-        st.success("教練對你的發言非常滿意！(教練信任度 +10)")
-        st.rerun()
-        
-    if col_ans2.button("🔥 『我覺得我應該得到更多正選時間！』"):
-        p['fans_love'] = min(100, p['fans_love'] + 8)
-        p['coach_trust'] = max(0, p['coach_trust'] - 10)
-        p['logs'].insert(0, f"第 {p['week']} 週：你公開表達對上場時間的不滿，引發球迷熱議。")
-        st.warning("球迷喜歡你的霸氣，但教練對你的言論感到不悅！(球迷喜愛 +8, 教練信任 -10)")
-        st.rerun()
+st.divider()
 
-    if col_ans3.button("😶 『無可奉告，我只想專注於訓練。』"):
-        st.info("你平淡地回應了記者。")
+# 底部：聯賽情報與轉會動態
+col_bot1, col_bot2 = st.columns(2)
 
-# --- TAB 3: 每日訓練 ---
-with tab_train:
-    st.header("🏋️ 訓練與狀態恢復")
-    
-    c_tr1, c_tr2 = st.columns(2)
-    with c_tr1:
-        st.subheader("🎯 技術特訓")
-        if st.button("加練射門與進攻 (體力 -20)"):
-            if p['energy'] >= 20:
-                p['energy'] -= 20
-                p['shooting'] += 1
-                st.success("射門能力 +1！")
-                st.rerun()
-            else: st.error("體力不足！")
+with col_bot1:
+    st.subheader("📊 聯賽形勢與個人數據")
+    st.write(f"目前球隊聯賽積分：**{p['points']} 分**")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("出場數", f"{p['matches']} 場")
+    m2.metric("進球數", f"{p['goals']} 球")
+    m3.metric("助攻數", f"{p['assists']} 次")
 
-        if st.button("加練傳球與視野 (體力 -20)"):
-            if p['energy'] >= 20:
-                p['energy'] -= 20
-                p['passing'] += 1
-                st.success("傳球能力 +1！")
-                st.rerun()
-            else: st.error("體力不足！")
-
-    with c_tr2:
-        st.subheader("🛌 休息與復原")
-        if st.button("進行理療與按摩休息 (體力 +40)"):
-            p['energy'] = min(100, p['energy'] + 40)
-            p['week'] += 1
-            st.success("體力大幅恢復！(消耗一週時間)")
-            st.rerun()
-
-# --- TAB 4: 經理人辦公室 ---
-with tab_transfer:
-    st.header("💼 經理人辦公室")
-    ovr = get_ovr(p)
-    
-    st.write(f"目前你的經理人收到以下球會的關注：")
-    
+with col_bot2:
+    st.subheader("💼 經理人轉會快訊")
     offers = [
-        ("葡超 - 葡萄牙體育 (Sporting CP)", 72, 12000),
+        ("葡超 - 葡萄牙體育 (Sporting CP)", 73, 12000),
         ("西甲 - 皇家馬德里", 82, 85000),
         ("英超 - 曼城", 85, 95000)
     ]
     
+    available_offer = False
     for club_name, req_ovr, wage in offers:
-        col_o1, col_o2 = st.columns([3, 1])
-        col_o1.write(f"⚽ **{club_name}** | 提議週薪：**${wage:,}** (要求 OVR: {req_ovr})")
         if ovr >= req_ovr:
-            if col_o2.button(f"簽約加盟", key=club_name):
+            available_offer = True
+            st.write(f"✨ **{club_name}** 向你發出邀請！(週薪：${wage:,})")
+            if st.button(f"✍️ 加盟 {club_name}", key=club_name):
                 p['club'] = club_name
                 p['wage'] = wage
-                p['news'] = f"【重磅轉會】官宣！{p['name']} 以天價薪酬加盟 {club_name}！"
-                st.success(f"恭喜加盟 {club_name}！")
+                p['social_tweets'] = [
+                    f"【重磅官宣】{p['name']} 以天價加盟 {club_name}！",
+                    f"球迷: 歡迎 {p['name']} 來到新球會！"
+                ]
+                st.success(f"成功加盟 {club_name}！")
                 st.rerun()
-        else:
-            col_o2.button("實力未達標", disabled=True, key=club_name)
-
-# --- TAB 5: 生涯日誌 ---
-with tab_career:
-    st.header("📜 生涯統計與記錄")
-    st.metric("總出場數", f"{p['matches']} 場")
-    st.metric("總進球數", f"{p['goals']} 球")
-    st.metric("總助攻數", f"{p['assists']} 次")
-    
-    st.divider()
-    st.subheader("📖 歷史日誌")
-    for log in p['logs']:
-        st.write(f"- {log}")
+    if not available_offer:
+        st.caption("目前你的 OVR 尚未達到豪門門檻，繼續表現吸引關注吧！")
