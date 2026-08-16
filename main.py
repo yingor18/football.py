@@ -86,6 +86,8 @@ ACHIEVEMENTS = {
     "international": ("🌍 為國效力", "首次入選國家隊", lambda p: p['caps'] >= 1),
     "veteran_age": ("🧓 薑越老越辣", "35歲仍然活躍於賽場", lambda p: p['age'] >= 35),
     "target_hit": ("🎯 KPI 達人", "首次達成賽季目標", lambda p: p['season_targets_hit'] >= 1),
+    "family_man": ("💍 步入婚姻", "成功結婚成家", lambda p: p.get('married', False)),
+    "parent": ("👶 為人父母", "首次迎接子女", lambda p: p.get('children', 0) >= 1),
 }
 
 WEEKLY_FLAVOR_EVENTS_TEMPLATE = [
@@ -111,6 +113,210 @@ def gen_flavor_text(p):
     money_delta = {1: 300, 5: -500}.get(idx, 0)
     return text, trust_delta, money_delta
 
+# --- 人生事件系統 (更衣室 NPC + 家庭因素) ---
+STAT_NAME_MAP = {"shooting": "射門", "passing": "傳球", "dribbling": "盤帶", "stamina": "體能", "defending": "防守"}
+
+def _ev_rival_confront_a(p):
+    p['chemistry'] = max(0, p['chemistry'] - 8)
+    p['coach_trust'] = min(100, p['coach_trust'] + 4)
+    return f"你同{p['rival_name']}當眾駁咀，教練欣賞你嘅硬氣，但更衣室氣氛變差。"
+
+def _ev_rival_confront_b(p):
+    p['chemistry'] = min(100, p['chemistry'] + 3)
+    return "你選擇一笑置之，隊友讚賞你嘅EQ，默契小幅提升。"
+
+def _ev_teammate_outing_a(p):
+    p['chemistry'] = min(100, p['chemistry'] + 12)
+    p['fatigue'] = min(100, p['fatigue'] + 10)
+    msg = f"你同{p['teammate_name']}玩到深夜，默契大增，但體力消耗唔少。"
+    if p['fatigue'] >= 90 and random.random() < 0.15:
+        p['injury_weeks'] = max(p['injury_weeks'], 1)
+        msg += " 第二日訓練你因為休息不足拉傷咗，需要休養。"
+    return msg
+
+def _ev_teammate_outing_b(p):
+    p['fatigue'] = max(0, p['fatigue'] - 5)
+    p['chemistry'] = min(100, p['chemistry'] + 1)
+    return "你選擇早啲休息，狀態保持良好。"
+
+def _ev_coach_tip_a(p):
+    p['fatigue'] = min(100, p['fatigue'] + 15)
+    growable = [k for k in STAT_NAME_MAP if p[k] < p['potential'][k]]
+    if growable:
+        k = min(growable, key=lambda x: p[x])
+        p[k] = min(p['potential'][k], p[k] + 1)
+        return f"喺{p['coach_name']}指導下加操，你嘅{STAT_NAME_MAP[k]}提升咗！"
+    return f"你按{p['coach_name']}建議加操，可惜狀態已達瓶頸，未見明顯進步。"
+
+def _ev_coach_tip_b(p):
+    p['fatigue'] = max(0, p['fatigue'] - 10)
+    return "你婉拒咗額外操練，選擇好好休息。"
+
+def _ev_meet_someone_a(p):
+    p['in_relationship'] = True
+    p['partner_name'] = random.choice(NAME_POOL)
+    p['family_happiness'] = min(100, p['family_happiness'] + 10)
+    return f"你同{p['partner_name']}開始咗一段感情，生活多咗一份甜蜜。"
+
+def _ev_meet_someone_b(p):
+    p['coach_trust'] = min(100, p['coach_trust'] + 1)
+    return "你決定專注事業，暫時冇再理會呢段緣分。"
+
+def _ev_propose_a(p):
+    p['married'] = True
+    p['spouse_name'] = p.get('partner_name') or random.choice(NAME_POOL)
+    p['in_relationship'] = False
+    p['money'] = max(0, p['money'] - 1500)
+    p['family_happiness'] = min(100, p['family_happiness'] + 20)
+    return f"你向{p['spouse_name']}求婚成功！婚禮開支 $1,500，但家庭幸福感大增。"
+
+def _ev_propose_b(p):
+    p['family_happiness'] = max(0, p['family_happiness'] - 5)
+    return "你覺得時機未成熟，決定維持現狀，對方有啲失望。"
+
+def _ev_expecting_a(p):
+    p['children'] += 1
+    p['money'] = max(0, p['money'] - 800)
+    p['family_happiness'] = min(100, p['family_happiness'] + 15)
+    return f"恭喜！你同{p.get('spouse_name') or '另一半'}迎接咗第 {p['children']} 個小朋友！育兒開支 $800。"
+
+def _ev_expecting_b(p):
+    p['family_happiness'] = max(0, p['family_happiness'] - 5)
+    return "你哋決定暫緩生育計劃，以事業為先。"
+
+def _ev_family_attention_a(p):
+    p['family_happiness'] = min(100, p['family_happiness'] + 20)
+    p['fatigue'] = min(100, p['fatigue'] + 5)
+    return "你抽時間陪伴家人，家庭幸福感大幅回升。"
+
+def _ev_family_attention_b(p):
+    p['family_happiness'] = max(0, p['family_happiness'] - 10)
+    p['coach_trust'] = min(100, p['coach_trust'] + 2)
+    return "你將時間投放喺球隊訓練上，家人略感被忽略。"
+
+def _ev_child_milestone_a(p):
+    p['family_happiness'] = min(100, p['family_happiness'] + 10)
+    p['fatigue'] = min(100, p['fatigue'] + 5)
+    return "你出席咗小朋友嘅重要活動，家庭關係更加緊密。"
+
+def _ev_child_milestone_b(p):
+    p['family_happiness'] = max(0, p['family_happiness'] - 8)
+    return "工作太忙，你錯過咗小朋友嘅活動，心裡有啲愧疚。"
+
+LIFE_EVENTS = [
+    {"id": "rival_confront", "condition": lambda p: True,
+     "title": "😤 更衣室磨擦",
+     "desc": "{rival} 喺訓練後當眾質疑你嘅上陣時間，更衣室氣氛一度緊張。",
+     "options": [
+         {"label": "正面駁咀，寸番轉頭", "apply": _ev_rival_confront_a},
+         {"label": "一笑置之，專注自己表現", "apply": _ev_rival_confront_b},
+     ]},
+    {"id": "teammate_outing", "condition": lambda p: True,
+     "title": "🍻 隊友夜蒲邀約",
+     "desc": "{teammate} 約你今晚一齊出去放鬆一下。",
+     "options": [
+         {"label": "赴約放鬆", "apply": _ev_teammate_outing_a},
+         {"label": "婉拒，早啲休息", "apply": _ev_teammate_outing_b},
+     ]},
+    {"id": "coach_tip", "condition": lambda p: True,
+     "title": "💬 教練嘅私人指導",
+     "desc": "{coach} 提出額外加操，針對性提升你嘅弱項。",
+     "options": [
+         {"label": "接受加操", "apply": _ev_coach_tip_a},
+         {"label": "婉拒，休息為重", "apply": _ev_coach_tip_b},
+     ]},
+    {"id": "meet_someone", "condition": lambda p: (not p['married']) and (not p['in_relationship']) and p['age'] >= 20,
+     "title": "💘 心動的邂逅",
+     "desc": "喺一次球會活動入面，你認識咗一位傾談甚歡嘅對象。",
+     "options": [
+         {"label": "開始拍拖", "apply": _ev_meet_someone_a},
+         {"label": "專注事業，婉拒", "apply": _ev_meet_someone_b},
+     ]},
+    {"id": "propose_marriage", "condition": lambda p: p['in_relationship'] and (not p['married']),
+     "title": "💍 人生的抉擇",
+     "desc": "同{partner}相處咗一段時間，你哋嘅感情已經非常穩定。",
+     "options": [
+         {"label": "求婚，共結連理", "apply": _ev_propose_a},
+         {"label": "未準備好，維持現狀", "apply": _ev_propose_b},
+     ]},
+    {"id": "expecting_child", "condition": lambda p: p['married'] and p['children'] < 3 and p['age'] < 40,
+     "title": "👶 新生命嘅來臨",
+     "desc": "你同{spouse}商量緊要唔要迎接下一個小生命。",
+     "options": [
+         {"label": "迎接新生命", "apply": _ev_expecting_a},
+         {"label": "暫緩計劃，以事業為先", "apply": _ev_expecting_b},
+     ]},
+    {"id": "family_attention", "condition": lambda p: (p['married'] or p['in_relationship'] or p['children'] > 0) and p['family_happiness'] < 50,
+     "title": "🏠 家人需要你",
+     "desc": "家人反映近排好少見到你，希望你可以抽多啲時間陪伴。",
+     "options": [
+         {"label": "抽時間陪伴家人", "apply": _ev_family_attention_a},
+         {"label": "以球隊為先，推遲家庭時間", "apply": _ev_family_attention_b},
+     ]},
+    {"id": "child_milestone", "condition": lambda p: p['children'] > 0,
+     "title": "🎒 小朋友嘅重要日子",
+     "desc": "小朋友學校有活動，希望你可以出席。",
+     "options": [
+         {"label": "出席活動支持", "apply": _ev_child_milestone_a},
+         {"label": "工作太忙，未能抽身", "apply": _ev_child_milestone_b},
+     ]},
+]
+
+def find_life_event(eid):
+    return next((e for e in LIFE_EVENTS if e['id'] == eid), None)
+
+# --- 存檔預設值(用於補齊舊存檔缺少嘅欄位,避免讀取時 crash) ---
+PLAYER_DEFAULTS = {
+    "name": "神秘球員", "position": "前鋒 (ST)", "age": 17, "country": None,
+    "club": "未知球會", "is_loaned": False, "parent_club": None, "wage": 800, "money": 2000,
+    "shooting": 50, "passing": 50, "dribbling": 50, "stamina": 50, "defending": 40,
+    "ap": 3, "max_ap": 3, "fatigue": 0, "chemistry": 40, "form": "平穩",
+    "injury_weeks": 0, "coach_trust": 45, "matches": 0, "goals": 0, "assists": 0, "saves": 0, "tackles": 0,
+    "season": 1, "week": 1, "social_tweets": ["存檔已讀取。"],
+    "match_in_progress": False, "match_event": None, "match_role": "bench", "match_result": None,
+    "league_table": {}, "rivals": [],
+    "achievements": [], "new_achievements": [], "joined_top_club": False,
+    "coach_name": "教練", "rival_name": "勁敵", "teammate_name": "隊友",
+    "season_goals": 0, "season_assists": 0, "season_saves": 0, "season_targets_hit": 0,
+    "season_target": {"goals": 5, "assists": 2, "saves": 0},
+    "caps": 0, "call_up_pending": False, "retired": False, "bench_result": None,
+    "recent_match_success": [], "contract_years_left": 3, "contract_expired": False,
+    "transfer_offer_pending": None, "life_event_pending": None,
+    "married": False, "in_relationship": False, "partner_name": None, "spouse_name": None,
+    "children": 0, "family_happiness": 70, "released": False,
+}
+
+def load_and_validate_save(uploaded_file):
+    """讀取存檔 JSON,補齊缺少嘅欄位,並回傳可用嘅 player dict。錯誤會拋出例外由呼叫方處理。"""
+    raw = json.load(uploaded_file)
+    if not isinstance(raw, dict):
+        raise ValueError("存檔內容格式不正確(唔係一個有效嘅 JSON 物件)")
+    data = dict(PLAYER_DEFAULTS)
+    data.update(raw)
+    if not data.get("country") or data["country"] not in ALL_COUNTRIES_DB:
+        data["country"] = list(ALL_COUNTRIES_DB.keys())[0]
+    data['achievements'] = set(data.get('achievements') or [])
+
+    stat_keys = ["shooting", "passing", "dribbling", "stamina", "defending"]
+    base_stats = data.get('base_stats')
+    if not base_stats:
+        base_stats = {k: data.get(k, PLAYER_DEFAULTS[k]) for k in stat_keys}
+    data['base_stats'] = base_stats
+
+    potential = data.get('potential') or {}
+    for k in stat_keys:
+        if k not in potential:
+            potential[k] = min(99, data.get(k, PLAYER_DEFAULTS[k]) + 20)
+    data['potential'] = potential
+
+    if not data.get('league_table'):
+        data['league_table'] = {data['club']: {"points": 0, "played": 0, "gf": 0, "ga": 0}}
+
+    if not data.get('season_target'):
+        data['season_target'] = {"goals": 5, "assists": 2, "saves": 0}
+
+    return data
+
 # --- 名人堂(留喺 session 內,新開生涯唔會清空) ---
 if "hall_of_fame" not in st.session_state:
     st.session_state.hall_of_fame = []
@@ -129,24 +335,15 @@ if not st.session_state.created:
         uploaded = st.file_uploader("選擇存檔檔案 (.json)", type=["json"])
         if uploaded is not None:
             try:
-                data = json.load(uploaded)
-                data['achievements'] = set(data.get('achievements', []))
-                if 'potential' not in data:
-                    data['potential'] = {
-                        "shooting": min(99, data['shooting'] + 20), "passing": min(99, data['passing'] + 20),
-                        "dribbling": min(99, data['dribbling'] + 20), "stamina": min(99, data['stamina'] + 20),
-                        "defending": min(99, data.get('defending', 40) + 20),
-                    }
-                if 'defending' not in data:
-                    data['defending'] = 40
-                if 'defending' not in data['potential']:
-                    data['potential']['defending'] = min(99, data['defending'] + 20)
+                data = load_and_validate_save(uploaded)
                 st.session_state.player = data
                 st.session_state.created = True
                 st.success("存檔讀取成功！")
                 st.rerun()
+            except (json.JSONDecodeError, ValueError) as e:
+                st.error(f"讀取失敗：存檔格式唔正確或已損壞（{e}）。請確認上傳咗正確嘅存檔檔案。")
             except Exception as e:
-                st.error(f"讀取失敗：{e}")
+                st.error(f"讀取失敗：存檔缺少必要資料，可能來自唔兼容嘅舊版本（{e}）。")
 
     with tab_new:
         if "random_3_countries" not in st.session_state:
@@ -220,6 +417,7 @@ if not st.session_state.created:
                 "country": selected_country, "club": start_club_obj['name'],
                 "is_loaned": False, "parent_club": None, "wage": start_club_obj['wage'], "money": 2000,
                 "shooting": sh, "passing": pa, "dribbling": dr, "stamina": st_attr, "defending": df,
+                "base_stats": {"shooting": sh, "passing": pa, "dribbling": dr, "stamina": st_attr, "defending": df},
                 "ap": 3, "max_ap": 3, "fatigue": 0, "chemistry": 40, "form": "平穩",
                 "injury_weeks": 0, "coach_trust": 45, "matches": 0, "goals": 0, "assists": 0, "saves": 0, "tackles": 0,
                 "season": 1, "week": 1,
@@ -236,6 +434,10 @@ if not st.session_state.created:
                 },
                 "caps": 0, "call_up_pending": False, "retired": False,
                 "potential": potential, "bench_result": None,
+                "recent_match_success": [], "contract_years_left": random.randint(2, 4), "contract_expired": False,
+                "transfer_offer_pending": None, "life_event_pending": None,
+                "married": False, "in_relationship": False, "partner_name": None, "spouse_name": None,
+                "children": 0, "family_happiness": 70, "released": False,
             }
             st.session_state.created = True
             st.rerun()
@@ -282,13 +484,24 @@ def simulate_other_matches():
                 p['league_table'][club]['points'] += 1
 
 def apply_age_decline():
-    """30歲後每季有機會自然衰退,模擬體能下滑"""
-    if p['age'] >= 30:
-        decline = random.randint(1, 3)
-        stat_keys = ["shooting", "passing", "dribbling", "stamina", "defending"]
-        for _ in range(decline):
-            k = random.choice(stat_keys)
-            p[k] = max(20, p[k] - 1)
+    """30歲後每季有機會自然衰退,模擬體能下滑。
+    衰退優先揀「特訓提升得最多」嘅屬性(練得越勤,退化風險越高),
+    而且年紀越大,一次過衰退嘅次數越多。"""
+    if p['age'] < 30:
+        return
+    if p['age'] < 33:
+        decline = random.randint(1, 2)
+    elif p['age'] < 36:
+        decline = random.randint(2, 3)
+    else:
+        decline = random.randint(3, 5)
+
+    stat_keys = ["shooting", "passing", "dribbling", "stamina", "defending"]
+    base = p.get('base_stats') or {k: p[k] for k in stat_keys}
+    for _ in range(decline):
+        weights = [max(1, p[k] - base.get(k, p[k]) + 1) for k in stat_keys]
+        k = random.choices(stat_keys, weights=weights, k=1)[0]
+        p[k] = max(20, p[k] - 1)
 
 def evaluate_season_target():
     """季尾檢查 KPI 有冇達標,影響信任度與獎金"""
@@ -314,6 +527,41 @@ def maybe_trigger_national_call_up():
     if p['caps'] < 200 and ovr >= 65 and random.random() < 0.15:
         p['call_up_pending'] = True
 
+def mid_season_checkin():
+    """季中(第20週)檢視 KPI 進度,長期落後或者遙遙領先都會即時影響信任度,
+    唔使成日淨係靠季尾一次結算。"""
+    t = p['season_target']
+    ratios = []
+    if t.get('goals'): ratios.append(p['season_goals'] / t['goals'])
+    if t.get('assists'): ratios.append(p['season_assists'] / t['assists'])
+    if t.get('saves'): ratios.append(p['season_saves'] / t['saves'])
+    if not ratios:
+        return
+    progress = sum(ratios) / len(ratios)
+    if progress < 0.3:
+        p['coach_trust'] = max(0, p['coach_trust'] - 5)
+        p['social_tweets'].insert(0, f"📋 季中檢討：{p['coach_name']}對你上半季嘅進度表示關注，信任度略為下降。")
+    elif progress > 0.7:
+        p['coach_trust'] = min(100, p['coach_trust'] + 3)
+        p['social_tweets'].insert(0, f"📋 季中檢討：{p['coach_name']}對你上半季嘅表現感到滿意！")
+
+def maybe_trigger_release():
+    """信任度長期跌至谷底,有機會被球會解約,被迫以低薪轉投同聯賽球會。"""
+    if p['coach_trust'] <= 5 and not p['is_loaned'] and random.random() < 0.08:
+        old_club = p['club']
+        candidates = [c for c in p.get('rivals', []) if c != p['club']]
+        if candidates:
+            new_club = random.choice(candidates)
+            p['club'] = new_club
+            p['wage'] = max(300, int(p['wage'] * 0.7))
+            p['coach_trust'] = 40
+            p['contract_years_left'] = random.randint(1, 3)
+            p['contract_expired'] = False
+            if new_club not in p['league_table']:
+                p['league_table'][new_club] = {"points": 0, "played": 0, "gf": 0, "ga": 0}
+            p['social_tweets'].insert(0, f"⚠️ {old_club} 決定同你解約！你以較低薪酬轉投 {new_club}。")
+            p['released'] = True
+
 def next_week():
     p['week'] += 1
     p['ap'] = p['max_ap']
@@ -321,18 +569,51 @@ def next_week():
     p['fatigue'] = max(0, p['fatigue'] - 16)
     p['match_result'] = None
     simulate_other_matches()
-    if random.random() < 0.45:
+
+    # 家庭開支(結婚同/或育有子女會有持續開支)
+    family_cost = (100 if p['married'] else 0) + 60 * p.get('children', 0)
+    if family_cost:
+        p['money'] = max(0, p['money'] - family_cost)
+
+    # 家庭幸福感過低會拖累狀態同信任度;過高則有輕微正面效果
+    if p.get('family_happiness', 70) < 30:
+        p['fatigue'] = min(100, p['fatigue'] + 5)
+        if random.random() < 0.3:
+            p['coach_trust'] = max(0, p['coach_trust'] - 2)
+            p['social_tweets'].insert(0, "🏠 家庭壓力令你難以專注訓練，表現略受影響。")
+    elif p.get('family_happiness', 70) > 80:
+        p['chemistry'] = min(100, p['chemistry'] + 1)
+
+    maybe_trigger_release()
+
+    # 人生事件(更衣室 NPC + 家庭)優先觸發;冇觸發先跌返去日常花絮
+    event_fired = False
+    if not p.get('life_event_pending') and not p['call_up_pending'] and not p.get('transfer_offer_pending'):
+        if random.random() < 0.25:
+            eligible = [e for e in LIFE_EVENTS if e['condition'](p)]
+            if eligible:
+                p['life_event_pending'] = random.choice(eligible)['id']
+                event_fired = True
+    if not event_fired and random.random() < 0.45:
         text, trust_d, money_d = gen_flavor_text(p)
         p['coach_trust'] = max(0, min(100, p['coach_trust'] + trust_d))
         p['money'] += money_d
         p['social_tweets'].insert(0, text)
+
     maybe_trigger_national_call_up()
     check_achievements()
+
+    if p['week'] == 20:
+        mid_season_checkin()
+
     if p['week'] > 38:
         evaluate_season_target()
         apply_age_decline()
         st.balloons()
         p['season'] += 1; p['week'] = 1; p['age'] += 1
+        p['contract_years_left'] = max(0, p.get('contract_years_left', 3) - 1)
+        if p['contract_years_left'] <= 0:
+            p['contract_expired'] = True
         if p['age'] >= 38:
             p['retired'] = True
 
@@ -347,6 +628,18 @@ status_c4.metric("💵 存款", f"${p['money']:,}")
 status_c5.metric("😫 疲勞", f"{p['fatigue']}%")
 status_c6.metric("🧢 信任度", f"{p['coach_trust']}%")
 st.caption(f"**{p['name']}** | {p['position']} | {p['club']} | {p['age']}歲 | 🌍 {p['caps']} 次國際賽出場")
+
+_family_bits = []
+if p.get('married'):
+    _family_bits.append(f"💍 已婚（{p.get('spouse_name') or '配偶'}）")
+elif p.get('in_relationship'):
+    _family_bits.append(f"💕 拍拖中（{p.get('partner_name') or '對象'}）")
+else:
+    _family_bits.append("💭 單身")
+if p.get('children', 0) > 0:
+    _family_bits.append(f"👶 子女 {p['children']} 人")
+_family_bits.append(f"🏠 家庭幸福感 {p.get('family_happiness', 70)}%")
+st.caption(" ｜ ".join(_family_bits))
 
 with st.expander("📋 查看能力數值"):
     st.caption("ℹ️ 每項屬性喺生涯開始時已隨機決定咗一個隱藏「潛力上限」（初始值 +10~30，上限99）。距離上限越遠，特訓/比賽進步機率越高；越接近上限，進步越困難。")
@@ -399,6 +692,30 @@ with tab_home:
         col_w1.markdown(f"## 🗓️ 第 {p['season']} 賽季 - 第 {p['week']}/38 週")
         if col_w2.button("⏩ 結束本週日程", type="secondary", use_container_width=True):
             next_week(); st.rerun()
+
+        if p.get('life_event_pending'):
+            ev = find_life_event(p['life_event_pending'])
+            if ev is None:
+                p['life_event_pending'] = None
+            else:
+                ev_desc = ev['desc'].format(
+                    rival=p['rival_name'], coach=p['coach_name'], teammate=p['teammate_name'],
+                    partner=p.get('partner_name') or '對方', spouse=p.get('spouse_name') or '另一半',
+                )
+                st.success(f"**{ev['title']}**\n\n{ev_desc}")
+                le1, le2 = st.columns(2)
+                if le1.button(ev['options'][0]['label'], use_container_width=True, key="life_event_opt_a"):
+                    msg = ev['options'][0]['apply'](p)
+                    p['social_tweets'].insert(0, msg)
+                    p['life_event_pending'] = None
+                    check_achievements()
+                    st.rerun()
+                if le2.button(ev['options'][1]['label'], use_container_width=True, key="life_event_opt_b"):
+                    msg = ev['options'][1]['apply'](p)
+                    p['social_tweets'].insert(0, msg)
+                    p['life_event_pending'] = None
+                    check_achievements()
+                    st.rerun()
 
         if p['call_up_pending']:
             c_info_now = ALL_COUNTRIES_DB[p['country']]
@@ -526,6 +843,13 @@ with tab_home:
                     p['coach_trust'] = max(0, p['coach_trust'] - 3)
                     trust_msg = "-3%"
 
+                recent = (p.get('recent_match_success') or [])[-4:] + [success]
+                p['recent_match_success'] = recent
+                streak_msg = ""
+                if len(recent) >= 3 and not any(recent[-3:]):
+                    p['coach_trust'] = max(0, p['coach_trust'] - 5)
+                    streak_msg = f" {p['coach_name']}開始質疑你近期嘅狀態，信任度額外流失。"
+
                 base_gf = random.randint(0, 2)
                 base_ga = random.randint(0, 2)
                 if success: base_gf += 1
@@ -547,7 +871,7 @@ with tab_home:
                 p['match_in_progress'] = False
                 p['match_event'] = None
                 p['match_result'] = {
-                    "success": success, "detail": detail + growth_msg, "trust_change": trust_msg,
+                    "success": success, "detail": detail + growth_msg + streak_msg, "trust_change": trust_msg,
                     "fatigue_add": fatigue_add, "team_score": (base_gf, base_ga), "opponent": opponent
                 }
                 p['social_tweets'].insert(0, f"賽後快訊：{match_result_text}")
@@ -719,6 +1043,65 @@ with tab_market:
         else:
             st.caption("當前能力值 (OVR) 尚不足以吸引頂級豪門，請繼續努力！")
 
+    st.divider()
+    st.markdown("#### 📄 合約狀況")
+    st.write(f"目前合約剩餘年期：**{p.get('contract_years_left', '未知')}** 年")
+    if p.get('contract_expired'):
+        st.warning("⚠️ 你嘅合約已經到期！請選擇續約或者轉投其他球會。")
+        cw1, cw2 = st.columns(2)
+        if cw1.button("✍️ 續約 (加薪)"):
+            p['wage'] = int(p['wage'] * random.uniform(1.05, 1.15))
+            p['contract_years_left'] = random.randint(2, 4)
+            p['contract_expired'] = False
+            p['social_tweets'].insert(0, f"📝 你同 {p['club']} 完成續約，週薪加至 ${p['wage']:,}。")
+            st.rerun()
+        if cw2.button("🚪 唔續約，尋找新東家"):
+            candidates = [c for c in p.get('rivals', []) if c != p['club']]
+            if candidates:
+                new_club = random.choice(candidates)
+                p['club'] = new_club
+                p['wage'] = max(300, int(p['wage'] * random.uniform(0.9, 1.2)))
+                p['coach_trust'] = 50
+                p['contract_years_left'] = random.randint(2, 4)
+                p['contract_expired'] = False
+                if new_club not in p['league_table']:
+                    p['league_table'][new_club] = {"points": 0, "played": 0, "gf": 0, "ga": 0}
+                p['social_tweets'].insert(0, f"🔁 你自由轉會加盟 {new_club}！")
+                st.rerun()
+            else:
+                st.caption("暫時搵唔到合適嘅新東家。")
+
+    st.divider()
+    st.markdown("#### 🔁 同級轉會市場")
+    if p.get('transfer_offer_pending'):
+        offer = p['transfer_offer_pending']
+        st.info(f"📩 收到轉會邀約：**{offer['club']}**，週薪 **${offer['wage']:,}**")
+        to1, to2 = st.columns(2)
+        if to1.button("✅ 接受邀約"):
+            p['club'] = offer['club']; p['wage'] = offer['wage']
+            p['coach_trust'] = 50; p['contract_years_left'] = random.randint(2, 4); p['contract_expired'] = False
+            if p['club'] not in p['league_table']:
+                p['league_table'][p['club']] = {"points": 0, "played": 0, "gf": 0, "ga": 0}
+            p['social_tweets'].insert(0, f"🔁 你轉投 {p['club']}！")
+            p['transfer_offer_pending'] = None
+            st.rerun()
+        if to2.button("❌ 拒絕邀約"):
+            p['transfer_offer_pending'] = None
+            st.rerun()
+    elif not p['is_loaned']:
+        st.caption("可以主動接觸同級球會，睇下有冇更好嘅條件。")
+        if st.button("🔎 尋找轉會邀約"):
+            candidates = [c for c in p.get('rivals', []) if c != p['club']]
+            if candidates:
+                offer_club = random.choice(candidates)
+                offer_wage = max(300, int(p['wage'] * random.uniform(0.85, 1.3)))
+                p['transfer_offer_pending'] = {"club": offer_club, "wage": offer_wage}
+                st.rerun()
+            else:
+                st.caption("暫時冇搵到合適嘅邀約。")
+    else:
+        st.caption("外借期間暫時唔可以進行同級轉會。")
+
     st.markdown("#### 🌍 國家隊生涯")
     st.write(f"代表 **{ALL_COUNTRIES_DB[p['country']]['national']}** 出場次數：**{p['caps']}** 次")
     st.caption("提示：OVR 越高,每週收到國家隊召集嘅機率越大。")
@@ -735,6 +1118,11 @@ with tab_career:
     st.write(f"🏅 成就解鎖：{len(p['achievements'])} / {len(ACHIEVEMENTS)}")
     st.write(f"🎯 賽季 KPI 達標次數：{p['season_targets_hit']} 次")
     st.write(f"🌍 國家隊出場：{p['caps']} 次")
+    _family_status = "已婚" if p.get('married') else ("拍拖中" if p.get('in_relationship') else "單身")
+    _family_line = f"🏠 家庭狀況：{_family_status}"
+    if p.get('children', 0) > 0:
+        _family_line += f"，育有 {p['children']} 名子女"
+    st.write(_family_line)
 
     st.divider()
     if p['age'] >= 30:
