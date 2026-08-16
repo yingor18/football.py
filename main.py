@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="綠茵傳奇 Pro", page_icon="⚽", layout="wide")
 
-# --- 1. 創角系統 (若未初始化，先進行創角) ---
+# --- 1. 創角系統 ---
 if "created" not in st.session_state:
     st.session_state.created = False
 
@@ -18,16 +18,12 @@ if not st.session_state.created:
         position = st.selectbox("場上位置", ["前鋒 (ST)", "進攻中場 (CAM)", "翼鋒 (LW/RW)"])
     
     with col_c2:
-        st.info("💡 不同位置會有不同的初始屬性偏重與比賽特點：\n- **前鋒**：射門能力突出\n- **中場**：傳球與視野突出\n- **翼鋒**：盤帶與速度突出")
+        st.info("💡 不同位置會有不同的初始屬性偏重：\n- **前鋒**：射門能力突出\n- **中場**：傳球與視野突出\n- **翼鋒**：盤帶與速度突出")
 
     if st.button("🚀 開始職業生涯", type="primary"):
-        # 根據位置設定初始屬性
-        if "前鋒" in position:
-            sh, pa, dr, st_attr = 72, 60, 65, 68
-        elif "中場" in position:
-            sh, pa, dr, st_attr = 62, 74, 66, 70
-        else: # 翼鋒
-            sh, pa, dr, st_attr = 66, 62, 75, 68
+        if "前鋒" in position: sh, pa, dr, st_attr = 72, 60, 65, 68
+        elif "中場" in position: sh, pa, dr, st_attr = 62, 74, 66, 70
+        else: sh, pa, dr, st_attr = 66, 62, 75, 68
             
         st.session_state.player = {
             "name": name,
@@ -49,6 +45,7 @@ if not st.session_state.created:
             "goals": 0,
             "assists": 0,
             "trophies": [],
+            "completed_milestones": [], # 已解鎖的里程碑
             "season": 1,
             "week": 1,
             "has_trainer": False,
@@ -59,7 +56,7 @@ if not st.session_state.created:
                 "媒體: 期待這位小將本賽季的表現。"
             ],
             "match_in_progress": False,
-            "match_state": None
+            "match_result": None # 儲存比賽結果報告
         }
         st.session_state.created = True
         st.rerun()
@@ -73,6 +70,20 @@ def get_ovr(player):
     return int(player['shooting'] * 0.35 + player['passing'] * 0.3 + player['dribbling'] * 0.25 + player['stamina'] * 0.1)
 
 ovr = get_ovr(p)
+
+# 里程碑任務檢查函數
+milestones = [
+    {"id": "first_goal", "title": "⚽ 職業生涯首球", "desc": "攻入職業生涯的第一個進球", "check": lambda p: p['goals'] >= 1},
+    {"id": "goal_10", "title": "🔥 箭頭人物", "desc": "累積攻入 10 個進球", "check": lambda p: p['goals'] >= 10},
+    {"id": "assist_10", "title": "🅰️ 助攻大師", "desc": "累積送出 10 次助攻", "check": lambda p: p['assists'] >= 10},
+    {"id": "ovr_80", "title": "🌟 洲際巨星", "desc": "綜合能力 (OVR) 達到 80", "check": lambda p: ovr >= 80},
+    {"id": "rich", "title": "💎 百萬富翁", "desc": "個人存款達到 $100,000", "check": lambda p: p['money'] >= 100000},
+]
+
+for m in milestones:
+    if m['id'] not in p['completed_milestones'] and m['check'](p):
+        p['completed_milestones'].append(m['id'])
+        st.toast(f"🏆 解鎖里程碑成就：【{m['title']}】！", icon="🎉")
 
 # 側邊欄
 st.sidebar.title("⚽ 綠茵傳奇 Pro")
@@ -122,48 +133,24 @@ if p['injury_weeks'] > 0:
 else:
     st.markdown(f"## 🗓️ 第 {p['season']} 賽季 - 第 {p['week']}/38 週")
 
-    # 關鍵時刻比賽直播 (根據位置顯示專屬選擇)
-    if p['match_in_progress']:
-        st.subheader(f"📡 比賽現場 - 關鍵時刻 ({p['position']})")
-        m_state = p['match_state']
-        st.write(f"⏱️ **{m_state['time']}**：{m_state['desc']}")
+    # A. 顯示比賽結果報告 (關鍵選擇完成後)
+    if p['match_result']:
+        res = p['match_result']
+        st.markdown("### 📊 本場比賽戰報")
         
-        c_m1, c_m2, c_m3 = st.columns(3)
-        choice = None
+        if res['success']:
+            st.balloons()
+            st.success(f"🎉 **【關鍵決策成功！】** {res['detail']}")
+        else:
+            st.error(f"❌ **【進攻挫敗】** {res['detail']}")
+            
+        st.info(f"📈 賽後數據影響：\n- 本場統計：**+{res['g']} 進球 | +{res['a']} 助攻**\n- 教練信任度：**{res['trust_change']}**\n- 當前狀態變更為：**{p['form']}**")
         
-        if "前鋒" in p['position']:
-            if c_m1.button("🚀 大力抽射"): choice = "shoot"
-            if c_m2.button("🗣️ 呼喚隊友分球"): choice = "pass"
-            if c_m3.button("💥 禁區頭鎚搶點"): choice = "shoot"
-        elif "中場" in p['position']:
-            if c_m1.button("👟 手術刀直塞"): choice = "pass"
-            if c_m2.button("☄️ 禁區外遠射"): choice = "shoot"
-            if c_m3.button("⚡ 擺脫防守掌控節奏"): choice = "dribble"
-        else: # 翼鋒
-            if c_m1.button("⚡ 邊路突破內切"): choice = "dribble"
-            if c_m2.button("🎯 高空傳中"): choice = "pass"
-            if c_m3.button("🚀 內切起腳弧線球"): choice = "shoot"
-
-        if choice:
-            bonus = 10 if p['form'] == "火熱" else 0
-            success = False
-            if choice == "shoot" and (random.randint(1, 100) + bonus) < p['shooting']: success = True; p['goals'] += 1
-            elif choice == "pass" and (random.randint(1, 100) + bonus) < p['passing']: success = True; p['assists'] += 1
-            elif choice == "dribble" and (random.randint(1, 100) + bonus) < p['dribbling']: success = True; p['goals'] += 1
-            
-            if success:
-                st.balloons()
-                st.success("⚽ 完美的決策！你成功的發揮為球隊改寫比數！")
-                p['form'] = "火熱"
-                p['coach_trust'] = min(100, p['coach_trust'] + 5)
-            else:
-                st.error("❌ 決策被對手防線破解。")
-                p['form'] = "平穩"
-            
-            p['match_in_progress'] = False
+        if st.button("確定並結束本週日程 ➔", type="primary"):
+            p['match_result'] = None
             p['week'] += 1
             
-            # 賽季結束 (第 38 週)
+            # 賽季結算 (第 38 週)
             if p['week'] > 38:
                 st.balloons()
                 st.subheader("🏆 賽季結算典禮")
@@ -179,9 +166,73 @@ else:
                 p['age'] += 1
                 p['rival_goals'] = random.randint(12, 20)
                 
-            st.button("繼續下週日程")
             st.rerun()
 
+    # B. 進行關鍵時刻比賽
+    elif p['match_in_progress']:
+        st.subheader(f"📡 比賽現場關鍵時刻 ({p['position']})")
+        st.write(f"⏱️ **82' 分鐘**：比賽進入最後拉鋸階段，你在前場接應到關鍵球權！對手後衛逼近，你選擇：")
+        
+        c_m1, c_m2, c_m3 = st.columns(3)
+        choice = None
+        
+        if "前鋒" in p['position']:
+            if c_m1.button("🚀 大力抽射 (考驗射門)"): choice = "shoot"
+            if c_m2.button("🗣️ 分球給空檔隊友 (考驗傳球)"): choice = "pass"
+            if c_m3.button("💥 禁區搶點頭鎚 (考驗射門)"): choice = "shoot"
+        elif "中場" in p['position']:
+            if c_m1.button("👟 手術刀直塞 (考驗傳球)"): choice = "pass"
+            if c_m2.button("☄️ 禁區外遠射 (考驗射門)"): choice = "shoot"
+            if c_m3.button("⚡ 盤帶掌控節奏 (考驗盤帶)"): choice = "dribble"
+        else: # 翼鋒
+            if c_m1.button("⚡ 邊路突破內切 (考驗盤帶)"): choice = "dribble"
+            if c_m2.button("🎯 高空傳中 (考驗傳球)"): choice = "pass"
+            if c_m3.button("🚀 內切起腳弧線球 (考驗射門)"): choice = "shoot"
+
+        if choice:
+            bonus = 10 if p['form'] == "火熱" else 0
+            success = False
+            m_g, m_a = 0, 0
+            detail_msg = ""
+            
+            if choice == "shoot":
+                if (random.randint(1, 100) + bonus) < p['shooting']:
+                    success = True; m_g = 1; detail_msg = "你起腳勁射，皮球直飛死角破網！進球！"
+                else: detail_msg = "你的射門角度太正，被對方門將沒收。"
+            elif choice == "pass":
+                if (random.randint(1, 100) + bonus) < p['passing']:
+                    success = True; m_a = 1; detail_msg = "你送出一記精準直塞，隊友輕鬆推射破門！助攻！"
+                else: detail_msg = "傳球意圖被對方後衛識破並遭到攔截。"
+            elif choice == "dribble":
+                if (random.randint(1, 100) + bonus) < p['dribbling']:
+                    success = True; m_g = 1; detail_msg = "你連續晃過兩名防守球員後冷靜扣過門將，推射空門得手！"
+                else: detail_msg = "強行突破時被對方後衛合力包抄破壞。"
+
+            p['goals'] += m_g
+            p['assists'] += m_a
+            
+            if success:
+                p['form'] = "火熱"
+                p['coach_trust'] = min(100, p['coach_trust'] + 5)
+                p['social_tweets'].insert(0, f"球迷: {p['name']} 剛才那個關鍵發揮簡直神了！")
+                trust_msg = "+5%"
+            else:
+                p['form'] = "平穩"
+                p['coach_trust'] = max(0, p['coach_trust'] - 3)
+                trust_msg = "-3%"
+
+            p['match_in_progress'] = False
+            # 存入比賽結果，等待玩家點擊確定
+            p['match_result'] = {
+                "success": success,
+                "detail": detail_msg,
+                "g": m_g,
+                "a": m_a,
+                "trust_change": trust_msg
+            }
+            st.rerun()
+
+    # C. 日程選單
     else:
         col_act1, col_act2, col_act3 = st.columns(3)
 
@@ -193,15 +244,8 @@ else:
                     p['matches'] += 1
                     p['money'] += p['wage']
                     
-                    if random.random() < 0.3:
-                        p['rival_goals'] += 1
-
-                    # 進入關鍵直播
+                    if random.random() < 0.3: p['rival_goals'] += 1
                     p['match_in_progress'] = True
-                    p['match_state'] = {
-                        "time": f"{random.randint(65, 85)} 分鐘",
-                        "desc": f"比賽進入關鍵階段，身為 {p['position']} 的你在前場拿到關鍵球權！"
-                    }
                     st.rerun()
                 else:
                     st.error("體力不足！請先休養。")
@@ -233,11 +277,19 @@ else:
 
 st.divider()
 
-# 下方：轉會與榮譽櫃
+# 下方：里程碑成就與轉會
 col_b1, col_b2 = st.columns(2)
 
 with col_b1:
-    st.subheader("💼 經理人轉會快訊")
+    st.subheader("🏆 里程碑成就系統 (Milestones)")
+    for m in milestones:
+        if m['id'] in p['completed_milestones']:
+            st.success(f"✅ **{m['title']}** - {m['desc']}")
+        else:
+            st.caption(f"🔒 **{m['title']}** - {m['desc']}")
+
+with col_b2:
+    st.subheader("💼 經理人轉會與個人榮譽")
     offers = [
         ("葡超 - 葡萄牙體育 (Sporting CP)", 73, 15000),
         ("西甲 - 皇家馬德里", 83, 90000),
@@ -252,11 +304,10 @@ with col_b1:
                 p['social_tweets'].insert(0, f"官宣！{p['name']} 重磅加盟 {c_name}！")
                 st.success(f"成功加盟 {c_name}！")
                 st.rerun()
-
-with col_b2:
-    st.subheader("🏆 個人榮譽櫃")
+                
+    st.write("---")
+    st.write("🏅 **獲獎榮譽：**")
     if p['trophies']:
-        for t in p['trophies']:
-            st.write(f"🥇 {t}")
+        for t in p['trophies']: st.write(f"🥇 {t}")
     else:
-        st.caption("目前尚無榮譽獎盃，繼續努力！")
+        st.caption("尚無榮譽獎盃。")
